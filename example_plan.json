@@ -1,0 +1,72 @@
+{
+  "output_dir": "fastlane/metadata/android/en-US/images",
+  "defaults": {
+    "shadow": true,
+    "title_color": "#ffffff",
+    "title_size": 72,
+    "subtitle_color": "#cccccc",
+    "subtitle_size": 38,
+    "preset": "Midnight Purple",
+    "phone_offset_y": 0
+  },
+  "devices": [
+    {
+      "name": "Phone",
+      "fastlane_dir": "phoneScreenshots",
+      "frame": "Pixel 8",
+      "phone_size": 150,
+      "canvas_w": 1440,
+      "canvas_h": 2560
+    },
+    {
+      "name": "7 Inch Tablet",
+      "fastlane_dir": "sevenInchScreenshots",
+      "frame": "7 Inch Tablet",
+      "phone_size": 130,
+      "canvas_w": 1600,
+      "canvas_h": 2560
+    },
+    {
+      "name": "10 Inch Tablet",
+      "fastlane_dir": "tenInchScreenshots",
+      "frame": "10 Inch Tablet",
+      "phone_size": 120,
+      "canvas_w": 2160,
+      "canvas_h": 2560
+    }
+  ],
+  "screenshots": [
+    {
+      "filename": "01_home.png",
+      "title": "Welcome to My App",
+      "subtitle": "Everything you need in one place"
+    },
+    {
+      "filename": "02_tracking.png",
+      "title": "Track Your Progress",
+      "subtitle": "See how far you've come",
+      "preset": "Ocean Blue"
+    },
+    {
+      "filename": "03_reminders.png",
+      "title": "Never Miss a Beat",
+      "subtitle": "Smart reminders that work for you",
+      "preset": "Forest Green"
+    },
+    {
+      "filename": "04_stats.png",
+      "title": "Detailed Stats",
+      "subtitle": "Understand your data at a glance",
+      "bg_color1": "#0d1b3e",
+      "bg_color2": "#1a4f8a"
+    },
+    {
+      "filename": "05_share.png",
+      "title": "Share With Friends",
+      "subtitle": "Celebrate together",
+      "preset": "Coral Sunset",
+      "title_color": "#ffe0cc",
+      "subtitle_color": "#ffb899"
+    }
+  ]
+}

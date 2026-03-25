@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# App generated files
+screenshots/
+exports/
+error.log
+
+# Project-specific plan files (keep example_plan.json as template)
+shut_the_box_plan.json
+
+# Claude Code
+.claude/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
