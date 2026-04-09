@@ -1,6 +1,6 @@
 """
-App Listing Studio — iOS & Android Store Listing Asset Generator
-Windows desktop app using PyQt6 + ADB + Pillow
+App Listing Studio — Android Store Listing Asset Generator
+Desktop app using PyQt6 + ADB + Pillow (Windows & Linux)
 """
 
 import sys
