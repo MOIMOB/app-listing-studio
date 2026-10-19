@@ -7,7 +7,19 @@ Turn raw device screenshots into polished Google Play and App Store listing imag
 
 ---
 
-## Store Preview (main view)
+## Plan Check (main view)
+
+Lists every plan JSON under the scan folder (default: the folder this repo is cloned in, e.g. `~/Repos`; **Change…** to pick another), grouped by repo with its error/warning count. Select one to see every image it would make, with a wireframe in place of the screenshot, and the checks for each device:
+
+- text wider than the text area, titles/subtitles wrapping to 3+ lines
+- text running into the device, device wider than the canvas or mostly cut off
+- title/subtitle contrast against the background (4.5:1)
+- canvas sizes Google Play / App Store Connect accept, and screenshot counts per device
+- unknown frames/presets, bad colours, missing or unloadable fonts, locale text that doesn't match a screenshot
+
+Toggle Google Play / App Store, devices, locale, **Frames not in plan** (the plan's style on every other frame), **Guides** (text areas and device top) and **Use captures** (raw screenshots where they exist). The plan file is watched — save it and the page updates.
+
+## Store Preview
 
 **My listings** (left column) holds your app repos and loose plan files — add with **+** (repo folder, plan JSON, or *Scan folder for repos…* to add every subfolder with `fastlane/` or a plan), remove with **✕** (files are untouched). Saved in `~/.app_listing_studio/config.json`.
 
@@ -29,7 +41,7 @@ Plan keys used by the preview (see `example_plan.json`):
 | `devices[].platform` | `android` / `ios`; normally inferred from `frame` |
 | `android_bars`, `ios_native` | iOS conversion: `[top, bottom]` px to crop, or skip it for real iOS shots |
 
-Screenshot Studio, Copy Preferences, Config Viewer and Saved Apps are under **Deprecated tools** in the sidebar until capture moves into the plan workflow.
+Store Preview, Screenshot Studio, Copy Preferences, Config Viewer and Saved Apps are under **Legacy tools** in the sidebar.
 
 ---
 
@@ -94,6 +106,33 @@ sudo apt install python3-pyqt6   # if pip install fails
 ### 4. Run
 ```bash
 python3 main.py
+```
+
+---
+
+## Setup — macOS
+
+### 1. Install Python and ADB
+The system Python is too old, so install Python 3.11+ with [Homebrew](https://brew.sh):
+```bash
+brew install python@3.12 android-platform-tools
+```
+
+If you use emulators, add the Android SDK emulator to your PATH (e.g. in `~/.zshrc`):
+```bash
+export PATH="$HOME/Library/Android/sdk/emulator:$PATH"
+```
+
+### 2. Install dependencies
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Run
+```bash
+python main.py
 ```
 
 ---

@@ -145,53 +145,53 @@ class GlobalLogPanel(QWidget):
     def _apply_style(self):
         self.setStyleSheet("""
             GlobalLogPanel {
-                background: #080810;
+                background: #111112;
             }
             QFrame#logSep {
-                background: #1a1a2e;
+                background: #2a2a2d;
                 border: none;
             }
             QWidget#logBar {
-                background: #080810;
+                background: #111112;
             }
             QLabel#logIcon {
-                color: #334;
+                color: #4a4a4f;
                 font-size: 14px;
             }
             QLabel#logLastMsg {
-                color: #445;
+                color: #55555a;
                 font-size: 11px;
             }
             QPushButton#logToggleBtn {
-                background: #0f0f1a;
-                color: #556;
-                border: 1px solid #1a1a2e;
+                background: #161617;
+                color: #5f5f64;
+                border: 1px solid #2a2a2d;
                 border-radius: 4px;
                 font-size: 10px;
                 padding: 0 8px;
             }
             QPushButton#logToggleBtn:hover {
-                background: #14142a;
-                color: #889;
-                border-color: #2a2a4a;
+                background: #1f1f21;
+                color: #8e8e93;
+                border-color: #323236;
             }
             QPushButton#logClearBtn {
                 background: transparent;
-                color: #334;
+                color: #4a4a4f;
                 border: none;
                 border-radius: 4px;
                 font-size: 10px;
                 padding: 0;
             }
             QPushButton#logClearBtn:hover {
-                background: #1a1a2e;
-                color: #667;
+                background: #2a2a2d;
+                color: #6e6e73;
             }
             QTextEdit#logEdit {
-                background: #050508;
-                color: #5a8a5a;
+                background: #0e0e0f;
+                color: #9a9aa0;
                 border: none;
-                border-top: 1px solid #1a1a2e;
+                border-top: 1px solid #2a2a2d;
                 padding: 6px 12px;
             }
         """)

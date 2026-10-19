@@ -89,7 +89,7 @@ def _app_icon(path, name, size):
             return _rounded_pixmap(Image.open(path).convert("RGBA"), size, size, radius)
         except Exception:
             pass
-    return _letter_icon(name, size, radius, "#7c3aed")
+    return _letter_icon(name, size, radius, "#5e9cff")
 
 
 # ─── Background render ────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ class _Thumb(QLabel):
     clicked = pyqtSignal(int)
 
     def __init__(self, idx, w, h):
-        super().__init__("⏳")
+        super().__init__("")
         self._idx = idx
         self.setFixedSize(w, h)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -193,14 +193,14 @@ class StorePreviewPanel(QWidget):
     def _build_listings_column(self):
         col = QWidget()
         col.setFixedWidth(250)
-        col.setStyleSheet("background:#0c0c16; border-right:1px solid #1a1a2e;")
+        col.setStyleSheet("background:#0c0c16; border-right:1px solid #2a2a2d;")
         lay = QVBoxLayout(col)
         lay.setContentsMargins(10, 12, 10, 10)
         lay.setSpacing(8)
 
         head = QHBoxLayout()
-        title = QLabel("MY LISTINGS")
-        title.setStyleSheet("color:#8890aa; font-size:11px; font-weight:bold; letter-spacing:1px; border:none;")
+        title = QLabel("My listings")
+        title.setStyleSheet("color:#ececec; font-size:13px; font-weight:600; border:none;")
         head.addWidget(title, 1)
         add_btn = QPushButton("+")
         add_btn.setFixedSize(30, 28)
@@ -223,9 +223,9 @@ class StorePreviewPanel(QWidget):
         self._list.setIconSize(QSize(36, 36))
         self._list.setStyleSheet("""
             QListWidget { background:transparent; border:none; outline:none; }
-            QListWidget::item { color:#ccd; padding:6px 4px; border-radius:8px; }
-            QListWidget::item:hover { background:#14142a; }
-            QListWidget::item:selected { background:#1e1e38; color:#fff; }
+            QListWidget::item { color:#d0d0d4; padding:6px 4px; border-radius:8px; }
+            QListWidget::item:hover { background:#1f1f21; }
+            QListWidget::item:selected { background:#262629; color:#fff; }
         """)
         self._list.currentRowChanged.connect(self._on_entry_selected)
         lay.addWidget(self._list, 1)
@@ -234,7 +234,7 @@ class StorePreviewPanel(QWidget):
     def _build_toolbar(self):
         bar = QWidget()
         bar.setFixedHeight(56)
-        bar.setStyleSheet("background:#13131f; border-bottom:1px solid #2a2a4a;")
+        bar.setStyleSheet("background:#1b1b1d; border-bottom:1px solid #323236;")
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(16, 8, 16, 8)
         bl.setSpacing(10)
@@ -250,7 +250,7 @@ class StorePreviewPanel(QWidget):
             b = QPushButton(label)
             b.setCheckable(True)
             b.setChecked(key == "android")
-            b.setStyleSheet("QPushButton:checked { background:#3d1065; border-color:#7c3aed; }")
+            b.setObjectName("chip")
             b.clicked.connect(lambda _c, k=key: self._set_platform(k))
             self._store_group.addButton(b)
             bl.addWidget(b)
@@ -270,7 +270,7 @@ class StorePreviewPanel(QWidget):
         bl.addWidget(self._dark_cb)
 
         self._status = QLabel("")
-        self._status.setStyleSheet("color:#7a7a9a; font-size:12px;")
+        self._status.setStyleSheet("color:#8e8e93; font-size:12px;")
         self._status.setWordWrap(True)
         bl.addWidget(self._status, 1)
         return bar
@@ -453,7 +453,7 @@ class StorePreviewPanel(QWidget):
             try:
                 self._source.reload()
             except Exception as e:
-                self._set_status(f"⚠ {e}", error=True)
+                self._set_status(f"{e}", error=True)
                 return
         self._cache = {}
         self._fill_devices()
@@ -475,7 +475,7 @@ class StorePreviewPanel(QWidget):
     def _set_status(self, text, error=False, tooltip=""):
         self._status.setText(text)
         self._status.setToolTip(tooltip)
-        self._status.setStyleSheet(f"color:{'#ff8866' if error else '#7a7a9a'}; font-size:12px;")
+        self._status.setStyleSheet(f"color:{'#ff8866' if error else '#8e8e93'}; font-size:12px;")
 
     def _clear_page(self):
         while self._holder_lay.count():
@@ -490,7 +490,7 @@ class StorePreviewPanel(QWidget):
         msg = QLabel(text)
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         msg.setWordWrap(True)
-        msg.setStyleSheet("color:#7a7a9a; font-size:14px;")
+        msg.setStyleSheet("color:#8e8e93; font-size:14px;")
         self._holder_lay.addWidget(msg)
 
     def _rebuild_page(self):
@@ -539,7 +539,7 @@ class StorePreviewPanel(QWidget):
             status += f"  ·  {self._source.locale}"
         status += "  ·  ● live"
         if missing:
-            status += f"  ·  ⚠ {len(missing)} raw screenshot(s) not found"
+            status += f"  ·  {len(missing)} raw screenshot(s) not found"
         self._set_status(status, error=bool(missing), tooltip="\n".join(missing))
         self._render(device)
 

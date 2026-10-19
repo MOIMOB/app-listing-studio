@@ -114,29 +114,29 @@ class _CardWidget(QFrame):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setStyleSheet("""
             QFrame {
-                background: #16162a;
-                border: 1px solid #2a2a4a;
+                background: #1c1c1e;
+                border: 1px solid #323236;
                 border-radius: 10px;
             }
-            QFrame:hover { border-color: #7c3aed; background: #1c1c38; }
+            QFrame:hover { border-color: #5e9cff; background: #232326; }
         """)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(9, 9, 9, 9)
         lay.setSpacing(6)
 
-        self._img_lbl = QLabel("⏳")
+        self._img_lbl = QLabel("")
         self._img_lbl.setFixedSize(_THUMB_W, _THUMB_H)
         self._img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._img_lbl.setStyleSheet(
-            "background:#0a0a18; border-radius:6px; border:none; color:#555; font-size:22px;"
+            "background:#111112; border-radius:6px; border:none; color:#555; font-size:22px;"
         )
         lay.addWidget(self._img_lbl)
 
         short = (title[:20] + "…") if len(title) > 20 else title
         lbl = QLabel(f"#{shot_num}  {short}")
         lbl.setStyleSheet(
-            "color:#ccd; font-size:11px; font-weight:bold; border:none; background:transparent;"
+            "color:#d0d0d4; font-size:11px; font-weight:bold; border:none; background:transparent;"
         )
         lbl.setWordWrap(True)
         lay.addWidget(lbl)
@@ -148,7 +148,7 @@ class _CardWidget(QFrame):
     def set_error(self):
         self._img_lbl.setText("✕")
         self._img_lbl.setStyleSheet(
-            "background:#1a0a0a; border-radius:6px; border:none; color:#a33; font-size:22px;"
+            "background:#2a1716; border-radius:6px; border:none; color:#e5534b; font-size:22px;"
         )
 
     def mousePressEvent(self, event):
@@ -168,7 +168,7 @@ class _FullViewDialog(QDialog):
         self.setWindowTitle("Config Viewer — Full View")
         self.setModal(True)
         self.resize(660, 860)
-        self.setStyleSheet("QDialog { background: #0a0a18; } QLabel { color: #dde; }")
+        self.setStyleSheet("QDialog { background: #111112; } QLabel { color: #e2e2e4; }")
 
         self._items = items
         self._idx = start_idx
@@ -188,7 +188,7 @@ class _FullViewDialog(QDialog):
 
         self._info = QLabel()
         self._info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._info.setStyleSheet("color:#99a; font-size:12px;")
+        self._info.setStyleSheet("color:#9a9aa0; font-size:12px;")
         nav.addWidget(self._info, 1)
 
         self._next_btn = QPushButton("▶")
@@ -208,7 +208,7 @@ class _FullViewDialog(QDialog):
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._img_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._img_lbl.setStyleSheet("background: #0d0d1e; border-radius: 10px;")
+        self._img_lbl.setStyleSheet("background: #111112; border-radius: 10px;")
         lay.addWidget(self._img_lbl, 1)
 
         self._show(self._idx)
@@ -236,7 +236,7 @@ class _FullViewDialog(QDialog):
             self._img_lbl.setPixmap(QPixmap())
             self._img_lbl.setText("Still rendering…")
             self._img_lbl.setStyleSheet(
-                "background:#0d0d1e; border-radius:10px; color:#555; font-size:14px;"
+                "background:#111112; border-radius:10px; color:#555; font-size:14px;"
             )
 
     def _prev(self):
@@ -298,23 +298,23 @@ class ConfigViewerPanel(QWidget):
         # Toolbar
         bar = QWidget()
         bar.setFixedHeight(52)
-        bar.setStyleSheet("background:#13131f; border-bottom:1px solid #2a2a4a;")
+        bar.setStyleSheet("background:#1b1b1d; border-bottom:1px solid #323236;")
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(16, 8, 16, 8)
         bl.setSpacing(10)
 
-        load_btn = QPushButton("📂  Load Config")
+        load_btn = QPushButton("Load Config")
         load_btn.setObjectName("primary")
         load_btn.clicked.connect(self._load_config)
         bl.addWidget(load_btn)
 
-        self._src_btn = QPushButton("📁  Screenshot Folder")
+        self._src_btn = QPushButton("Screenshot Folder")
         self._src_btn.setToolTip("Folder containing the raw screenshot .png files referenced in the config")
         self._src_btn.clicked.connect(self._browse_source)
         self._src_btn.setEnabled(False)
         bl.addWidget(self._src_btn)
 
-        self._render_btn = QPushButton("🔄  Re-render")
+        self._render_btn = QPushButton("Re-render")
         self._render_btn.clicked.connect(self._render_all)
         self._render_btn.setEnabled(False)
         bl.addWidget(self._render_btn)
@@ -322,7 +322,7 @@ class ConfigViewerPanel(QWidget):
         bl.addStretch()
 
         self._status = QLabel("Load a config file to begin")
-        self._status.setStyleSheet("color:#7a7a9a; font-size:12px;")
+        self._status.setStyleSheet("color:#8e8e93; font-size:12px;")
         bl.addWidget(self._status)
 
         outer.addWidget(bar)
@@ -333,7 +333,7 @@ class ConfigViewerPanel(QWidget):
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
 
         self._content = QWidget()
-        self._content.setStyleSheet("background:#0f0f1a;")
+        self._content.setStyleSheet("background:#161617;")
         self._content_lay = QVBoxLayout(self._content)
         self._content_lay.setContentsMargins(20, 20, 20, 20)
         self._content_lay.setSpacing(20)
@@ -411,13 +411,13 @@ class ConfigViewerPanel(QWidget):
                 or f"Device {dev_idx + 1}"
             )
             is_tablet = "tablet" in dev_name.lower()
-            icon = "📟" if is_tablet else "📱"
+            icon = "" if is_tablet else ""
 
             # Section header
             hdr = QLabel(f"{icon}  {dev_name}")
             hdr.setStyleSheet(
-                "color:#aab; font-size:13px; font-weight:bold; "
-                "letter-spacing:1px; padding:4px 0 8px 0; background:transparent;"
+                "color:#a8a8ad; font-size:13px; font-weight:bold; "
+                "padding:4px 0 8px 0; background:transparent;"
             )
             self._content_lay.addWidget(hdr)
 

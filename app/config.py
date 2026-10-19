@@ -6,7 +6,9 @@ Schema:
   "apps": [{"name": "My App", "package": "com.example.myapp"}, ...],
   "last_copy_package": "com.example.myapp",
   "last_plan": "C:/path/to/plan.json",          # last selected listing entry
-  "listings": ["C:/Repos/my-app", "C:/path/to/plan.json"]
+  "listings": ["C:/Repos/my-app", "C:/path/to/plan.json"],
+  "scan_root": "C:/Repos",                      # Plan Check scans this for plan JSONs
+  "last_checked": "C:/Repos/my-app/plan.json"   # last plan opened in Plan Check
 }
 """
 
@@ -98,4 +100,28 @@ class AppConfig:
     def remove_listing(path: str):
         data = _load()
         data["listings"] = [p for p in data.get("listings", []) if p != path]
+        _save(data)
+
+    # ── Plan Check (folder scanned for plan JSONs, last checked plan) ─────────
+
+    @staticmethod
+    def get_scan_root() -> str:
+        """Defaults to the folder this app is cloned in (e.g. ~/Repos)."""
+        default = str(Path(__file__).resolve().parent.parent.parent)
+        return _load().get("scan_root", default)
+
+    @staticmethod
+    def set_scan_root(path: str):
+        data = _load()
+        data["scan_root"] = path
+        _save(data)
+
+    @staticmethod
+    def get_last_checked() -> str:
+        return _load().get("last_checked", "")
+
+    @staticmethod
+    def set_last_checked(path: str):
+        data = _load()
+        data["last_checked"] = path
         _save(data)

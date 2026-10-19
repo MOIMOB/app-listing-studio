@@ -39,7 +39,7 @@ class SettingsPage(QWidget):
 
         # Page title
         title = QLabel("Settings")
-        title.setStyleSheet("font-size:24px; font-weight:bold; color:#eef;")
+        title.setStyleSheet("font-size:24px; font-weight:bold; color:#ececec;")
         layout.addWidget(title)
 
         layout.addWidget(self._make_hsep())
@@ -56,14 +56,14 @@ class SettingsPage(QWidget):
 
         # Section heading
         heading = QLabel("Saved Apps")
-        heading.setStyleSheet("font-size:16px; font-weight:bold; color:#dde;")
+        heading.setStyleSheet("font-size:16px; font-weight:bold; color:#e2e2e4;")
         vl.addWidget(heading)
 
         desc = QLabel(
             "Package IDs saved here appear as quick-select options in the "
             "Copy Preferences tool."
         )
-        desc.setStyleSheet("color:#667; font-size:12px;")
+        desc.setStyleSheet("color:#6e6e73; font-size:12px;")
         desc.setWordWrap(True)
         vl.addWidget(desc)
 
@@ -129,7 +129,7 @@ class SettingsPage(QWidget):
         if not apps:
             empty = QLabel("No apps saved yet. Add one above.")
             empty.setStyleSheet(
-                "color:#334; font-size:12px; font-style:italic; padding:12px 0 4px 0;"
+                "color:#4a4a4f; font-size:12px; font-style:italic; padding:12px 0 4px 0;"
             )
             self._list_layout.addWidget(empty)
             return
@@ -148,9 +148,9 @@ class SettingsPage(QWidget):
         hl.setContentsMargins(4, 0, 4, 0)
         hl.setSpacing(12)
         name_hdr = QLabel("Name")
-        name_hdr.setStyleSheet("color:#445; font-size:11px; font-weight:bold; letter-spacing:1px;")
+        name_hdr.setStyleSheet("color:#55555a; font-size:11px; font-weight:bold;")
         pkg_hdr = QLabel("Package ID")
-        pkg_hdr.setStyleSheet("color:#445; font-size:11px; font-weight:bold; letter-spacing:1px;")
+        pkg_hdr.setStyleSheet("color:#55555a; font-size:11px; font-weight:bold;")
         hl.addWidget(name_hdr, 1)
         hl.addWidget(pkg_hdr, 2)
         hl.addSpacing(34)   # room for the delete button
@@ -161,17 +161,17 @@ class SettingsPage(QWidget):
         row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         row.setStyleSheet(
             "QWidget { border-radius:6px; padding:2px 0; }"
-            "QWidget:hover { background:#0f0f1a; }"
+            "QWidget:hover { background:#161617; }"
         )
         hl = QHBoxLayout(row)
         hl.setContentsMargins(4, 6, 4, 6)
         hl.setSpacing(12)
 
         name_lbl = QLabel(name)
-        name_lbl.setStyleSheet("color:#ccd; font-size:13px;")
+        name_lbl.setStyleSheet("color:#d0d0d4; font-size:13px;")
 
         pkg_lbl = QLabel(package)
-        pkg_lbl.setStyleSheet("color:#7c3aed; font-size:12px;")
+        pkg_lbl.setStyleSheet("color:#5e9cff; font-size:12px;")
         pkg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         del_btn = QPushButton("✕")
@@ -220,6 +220,6 @@ class SettingsPage(QWidget):
     def _make_hsep(self) -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet("color:#1e1e38;")
+        f.setStyleSheet("color:#262629;")
         f.setFixedHeight(1)
         return f

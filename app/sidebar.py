@@ -1,22 +1,20 @@
 """
-Animated collapsible sidebar navigation widget.
-Expanded (default): 220px — icon + label.
-Collapsed: 52px  — icon only.
+Sidebar navigation: a plain text list in three zones.
 
-Two button zones:
-  • add_tool()   — scrollable main area (tools)
-  • add_pinned() — fixed bottom strip (settings, etc.), above the toggle
+  • add_tool(id, label)               — main tools, top of the list
+  • add_tool(id, label, group="...")  — tools inside a collapsible group
+                                        (e.g. "Legacy tools"), below the main tools
+  • add_pinned(id, label)             — fixed bottom strip (Settings)
+
+The first main tool added is selected automatically.
 """
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame,
-)
-from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QFrame
+from PyQt6.QtCore import pyqtSignal, Qt
 
-SIDEBAR_EXPANDED  = 220
-SIDEBAR_COLLAPSED = 52
-ANIM_MS = 220
+from app import theme
+
+SIDEBAR_WIDTH = 208
 
 
 class SidebarWidget(QWidget):
@@ -24,229 +22,143 @@ class SidebarWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._expanded = True
-        # All registered items regardless of zone
-        self._items: dict[str, tuple[QPushButton, str, str]] = {}
+        self._items: dict[str, QPushButton] = {}
+        self._groups: dict[str, tuple[QPushButton, QWidget, QVBoxLayout]] = {}
         self._active: str | None = None
-        self._section_labels: list[QLabel] = []
 
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFixedWidth(SIDEBAR_EXPANDED)
-
+        self.setFixedWidth(SIDEBAR_WIDTH)
         self._build()
-        self._build_animations()
         self._apply_style()
 
     # ── Construction ──────────────────────────────────────────────────────────
 
     def _build(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(10, 14, 10, 10)
         layout.setSpacing(0)
 
-        # ── Header ────────────────────────────────────────────────────────────
-        hdr = QWidget()
-        hdr.setFixedHeight(52)
-        hdr.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        hdr.setObjectName("sidebarHeader")
-        hl = QHBoxLayout(hdr)
-        hl.setContentsMargins(10, 0, 8, 0)
-        hl.setSpacing(8)
+        title = QLabel("App Listing Studio")
+        title.setObjectName("sidebarTitle")
+        layout.addWidget(title)
+        layout.addSpacing(14)
 
-        logo = QLabel("🎬")
-        lf = QFont()
-        lf.setPointSize(16)
-        logo.setFont(lf)
-        logo.setFixedSize(32, 32)
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._tool_layout = QVBoxLayout()
+        self._tool_layout.setSpacing(1)
+        layout.addLayout(self._tool_layout)
 
-        self._app_name_lbl = QLabel("App Studio")
-        nf = QFont()
-        nf.setPointSize(10)
-        nf.setBold(True)
-        self._app_name_lbl.setFont(nf)
-        self._app_name_lbl.setObjectName("sidebarTitle")
+        self._group_layout = QVBoxLayout()
+        self._group_layout.setSpacing(1)
+        layout.addLayout(self._group_layout)
 
-        hl.addWidget(logo)
-        hl.addWidget(self._app_name_lbl, 1)
-        layout.addWidget(hdr)
-        layout.addWidget(self._make_sep())
+        layout.addStretch(1)
 
-        # ── Main tool area (flexible) ─────────────────────────────────────────
-        self._tool_area = QWidget()
-        self._tool_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self._tool_layout = QVBoxLayout(self._tool_area)
-        self._tool_layout.setContentsMargins(6, 8, 6, 8)
-        self._tool_layout.setSpacing(3)
-        self._tool_layout.addStretch()
-        layout.addWidget(self._tool_area, 1)
+        sep = QFrame()
+        sep.setObjectName("sidebarSep")
+        sep.setFixedHeight(1)
+        layout.addWidget(sep)
+        layout.addSpacing(6)
 
-        # ── Pinned bottom area (settings etc.) ────────────────────────────────
-        layout.addWidget(self._make_sep())
-
-        self._pinned_area = QWidget()
-        self._pinned_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self._pinned_layout = QVBoxLayout(self._pinned_area)
-        self._pinned_layout.setContentsMargins(6, 4, 6, 4)
-        self._pinned_layout.setSpacing(3)
-        layout.addWidget(self._pinned_area)
-
-        # ── Toggle ────────────────────────────────────────────────────────────
-        layout.addWidget(self._make_sep())
-        self._toggle = QPushButton("◀")
-        self._toggle.setObjectName("sidebarToggle")
-        self._toggle.setFixedHeight(38)
-        self._toggle.setToolTip("Collapse sidebar")
-        self._toggle.clicked.connect(self.toggle)
-        layout.addWidget(self._toggle)
-
-    def _make_sep(self):
-        f = QFrame()
-        f.setFrameShape(QFrame.Shape.HLine)
-        f.setObjectName("sidebarSep")
-        f.setFixedHeight(1)
-        return f
-
-    def _build_animations(self):
-        self._anim_min = QPropertyAnimation(self, b"minimumWidth")
-        self._anim_min.setDuration(ANIM_MS)
-        self._anim_min.setEasingCurve(QEasingCurve.Type.InOutCubic)
-
-        self._anim_max = QPropertyAnimation(self, b"maximumWidth")
-        self._anim_max.setDuration(ANIM_MS)
-        self._anim_max.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._pinned_layout = QVBoxLayout()
+        self._pinned_layout.setSpacing(1)
+        layout.addLayout(self._pinned_layout)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def add_tool(self, tool_id: str, icon: str, label: str):
-        """Add a tool button to the main (scrollable) area. First added is auto-selected."""
-        btn = self._make_btn(tool_id, icon, label)
-        pos = self._tool_layout.count() - 1   # before trailing stretch
-        self._tool_layout.insertWidget(pos, btn)
-        self._items[tool_id] = (btn, icon, label)
-        if self._active is None:
-            self._select(tool_id)
+    def add_tool(self, tool_id: str, label: str, group: str | None = None):
+        btn = self._make_btn(tool_id, label)
+        if group is None:
+            self._tool_layout.addWidget(btn)
+            if self._active is None:
+                self._select(tool_id)
+        else:
+            _, _, body_layout = self._group(group)
+            btn.setProperty("nested", True)
+            body_layout.addWidget(btn)
+        self._items[tool_id] = btn
 
-    def add_section(self, label: str):
-        """Start a labelled group in the main area; tools added after it fall under it."""
-        lbl = QLabel(label.upper())
-        lbl.setObjectName("sidebarSection")
-        lbl.setVisible(self._expanded)
-        pos = self._tool_layout.count() - 1
-        self._tool_layout.insertWidget(pos, lbl)
-        self._section_labels.append(lbl)
-
-    def add_pinned(self, tool_id: str, icon: str, label: str):
-        """Add a button pinned to the bottom strip (e.g. Settings)."""
-        btn = self._make_btn(tool_id, icon, label)
+    def add_pinned(self, tool_id: str, label: str):
+        btn = self._make_btn(tool_id, label)
         self._pinned_layout.addWidget(btn)
-        self._items[tool_id] = (btn, icon, label)
-        # Pinned items never auto-select
+        self._items[tool_id] = btn
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _make_btn(self, tool_id: str, icon: str, label: str) -> QPushButton:
-        btn = QPushButton(f"  {icon}   {label}")
+    def _group(self, name: str):
+        if name in self._groups:
+            return self._groups[name]
+
+        header = QPushButton()
+        header.setObjectName("groupHeader")
+        header.setCheckable(True)
+        header.setChecked(False)
+        header.setFixedHeight(30)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(1)
+        body.setVisible(False)
+
+        def _toggle(open_: bool):
+            body.setVisible(open_)
+            header.setText(f"{'▾' if open_ else '▸'}  {name}")
+
+        header.toggled.connect(_toggle)
+        _toggle(False)
+
+        if self._group_layout.count() == 0:
+            self._group_layout.addSpacing(14)
+        self._group_layout.addWidget(header)
+        self._group_layout.addWidget(body)
+        self._groups[name] = (header, body, body_layout)
+        return self._groups[name]
+
+    def _make_btn(self, tool_id: str, label: str) -> QPushButton:
+        btn = QPushButton(label)
         btn.setCheckable(True)
         btn.setObjectName("toolBtn")
-        btn.setFixedHeight(40)
-        btn.setToolTip(label)
+        btn.setFixedHeight(30)
         btn.clicked.connect(lambda _checked, tid=tool_id: self._select(tid))
         return btn
 
     def _select(self, tool_id: str):
-        for tid, (btn, _, _) in self._items.items():
+        for tid, btn in self._items.items():
             btn.setChecked(tid == tool_id)
         self._active = tool_id
         self.tool_selected.emit(tool_id)
 
-    def toggle(self):
-        if self._expanded:
-            self._collapse()
-        else:
-            self._expand()
-
-    def _expand(self):
-        self._expanded = True
-        self._animate(SIDEBAR_COLLAPSED, SIDEBAR_EXPANDED)
-        self._toggle.setText("◀")
-        self._toggle.setToolTip("Collapse sidebar")
-        self._app_name_lbl.setVisible(True)
-        for lbl in self._section_labels:
-            lbl.setVisible(True)
-        for _, (btn, icon, label) in self._items.items():
-            btn.setText(f"  {icon}   {label}")
-
-    def _collapse(self):
-        self._expanded = False
-        self._animate(SIDEBAR_EXPANDED, SIDEBAR_COLLAPSED)
-        self._toggle.setText("▶")
-        self._toggle.setToolTip("Expand sidebar")
-        self._app_name_lbl.setVisible(False)
-        for lbl in self._section_labels:
-            lbl.setVisible(False)
-        for _, (btn, icon, _) in self._items.items():
-            btn.setText(icon)
-
-    def _animate(self, start: int, end: int):
-        for anim in (self._anim_min, self._anim_max):
-            anim.setStartValue(start)
-            anim.setEndValue(end)
-            anim.start()
-
     def _apply_style(self):
-        self.setStyleSheet("""
-            SidebarWidget {
-                background: #0a0a14;
-                border-right: 1px solid #1a1a2e;
-            }
-            QWidget#sidebarHeader {
-                background: #0a0a14;
-            }
-            QLabel#sidebarTitle {
-                color: #bbc;
-            }
-            QLabel#sidebarSection {
-                color: #556;
-                font-size: 10px;
-                font-weight: bold;
-                letter-spacing: 1px;
-                padding: 14px 10px 4px 10px;
-            }
-            QFrame#sidebarSep {
-                background: #1a1a2e;
-                border: none;
-            }
-            QPushButton#toolBtn {
-                background: transparent;
-                color: #99a;
-                border: none;
-                border-radius: 8px;
-                text-align: left;
+        self.setStyleSheet(f"""
+            SidebarWidget {{
+                background: {theme.BG_SUNKEN};
+                border-right: 1px solid {theme.BORDER};
+            }}
+            QLabel#sidebarTitle {{
+                color: {theme.TEXT};
                 font-size: 13px;
-                padding: 0 8px;
-            }
-            QPushButton#toolBtn:hover {
-                background: #14142a;
-                color: #ccd;
-            }
-            QPushButton#toolBtn:checked {
-                background: #1e1e38;
-                color: #eef;
-                font-weight: bold;
-            }
-            QPushButton#toolBtn:checked:hover {
-                background: #242448;
-            }
-            QPushButton#sidebarToggle {
-                background: #0a0a14;
-                color: #445;
+                font-weight: 600;
+                padding-left: 8px;
+            }}
+            QFrame#sidebarSep {{ background: {theme.BORDER}; border: none; }}
+            QPushButton#toolBtn, QPushButton#groupHeader {{
+                background: transparent;
+                color: {theme.TEXT_2};
                 border: none;
-                border-radius: 0px;
-                font-size: 11px;
-            }
-            QPushButton#sidebarToggle:hover {
-                background: #0f0f1a;
-                color: #778;
-            }
+                border-radius: 5px;
+                text-align: left;
+                padding: 0 8px;
+                font-size: 13px;
+            }}
+            QPushButton#toolBtn[nested="true"] {{ padding-left: 22px; }}
+            QPushButton#toolBtn:hover, QPushButton#groupHeader:hover {{
+                background: {theme.SURFACE};
+                color: {theme.TEXT};
+            }}
+            QPushButton#toolBtn:checked {{
+                background: {theme.SURFACE_2};
+                color: {theme.TEXT};
+            }}
+            QPushButton#groupHeader {{ color: {theme.TEXT_3}; font-size: 12px; }}
+            QPushButton#groupHeader:checked {{ background: transparent; }}
         """)
