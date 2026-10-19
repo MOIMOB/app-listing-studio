@@ -1,9 +1,35 @@
 # App Listing Studio
-### Android Play Store Listing Asset Generator
+### Play Store & App Store Listing Asset Generator
 
-Turn raw device screenshots into polished Google Play listing images — with device frames, gradient backgrounds, and custom text. One click to capture, one click to export.
+Turn raw device screenshots into polished Google Play and App Store listing images — with device frames, gradient backgrounds, and custom text. One click to capture, one click to export.
 
-> **Platform support:** Android only. iOS is not currently supported.
+> **Platform support:** captures come from Android devices/emulators via ADB. App Store images are made from the same captures: pick an iOS frame (**iPhone 16 Pro Max**, **iPad Pro 13**) and the Android status and nav bars are cropped off and replaced with an iOS status bar (9:41, signal, wifi, battery), Dynamic Island and home indicator. Bar heights are read from the device on capture; for imported files they are estimated and can be adjusted under **Crop Android**. Works best when the app's UI looks the same on both platforms (e.g. Capacitor/Flutter/React Native) — Android-only UI such as Material back arrows can still get an App Store rejection.
+
+---
+
+## Store Preview (main view)
+
+**My listings** (left column) holds your app repos and loose plan files — add with **+** (repo folder, plan JSON, or *Scan folder for repos…* to add every subfolder with `fastlane/` or a plan), remove with **✕** (files are untouched). Saved in `~/.app_listing_studio/config.json`.
+
+Each repo can be previewed from:
+- **Store files (fastlane)** — the images already in fastlane: `metadata/android/<locale>/images/*Screenshots/` for Play, `screenshots/<locale>/` for the App Store (grouped by device from `APP_IPHONE_67`-style names or pixel size). Listing text and icon come from the fastlane metadata `.txt` files.
+- **Plan: …** — any plan JSON found in the repo, rendered from raw captures.
+
+Open a plan JSON and see it as a Google Play or App Store listing page: icon, name, rating row, install button, the screenshot carousel at store size, and the description. Toggle store, device (phone / tablet / iPhone / iPad) and light/dark.
+
+The plan file, icon and raw screenshots are watched — edit the JSON in your editor, save, and the preview re-renders. Invalid JSON mid-edit keeps the last good preview and shows the error in the toolbar. The last opened plan reopens on start.
+
+Plan keys used by the preview (see `example_plan.json`):
+
+| Key | Meaning |
+|---|---|
+| `app.name`, `developer`, `icon`, `rating`, `downloads`, `age`, `short_description`, `description` | Listing page text; `icon` is relative to the plan |
+| `source_dir` | Folder with the raw screenshots, relative to the plan (devices can override it, e.g. tablet captures) |
+| `screenshots[].source` | Raw screenshot file; defaults to `filename` |
+| `devices[].platform` | `android` / `ios`; normally inferred from `frame` |
+| `android_bars`, `ios_native` | iOS conversion: `[top, bottom]` px to crop, or skip it for real iOS shots |
+
+Screenshot Studio, Copy Preferences, Config Viewer and Saved Apps are under **Deprecated tools** in the sidebar until capture moves into the plan workflow.
 
 ---
 
@@ -72,6 +98,14 @@ python3 main.py
 
 ---
 
+## iOS Simulator (macOS)
+
+On a Mac with Xcode installed, booted iOS Simulators show up in the device list next to ADB devices (🍎). Capturing from one sets Apple's marketing status bar (9:41, full signal and battery) via `xcrun simctl status_bar` and takes a native screenshot — no Android bar swap. **Clean / Restore Status Bar** works on simulators too. Simulator captures are saved as `screenshots/capture_ios_*.png`; for other imported iOS screenshots tick **Native iOS** in the Crop Android row.
+
+Boot a simulator first: `open -a Simulator` (or `xcrun simctl boot "iPhone 16 Pro Max"`), then **⟳ Scan**.
+
+---
+
 ## Enable USB Debugging on your device
 
 1. Go to **Settings → About Phone**
@@ -93,6 +127,7 @@ python3 main.py
 - Use **presets** for quick background colors
 - Preview updates live as you change settings
 - Batch export with a JSON plan file for multiple device sizes at once
+- iOS devices in a plan can set `output_dir` (e.g. `fastlane/screenshots`) and `filename_prefix` (e.g. `iphone_`, `ipad_`) so iPhone and iPad shots share fastlane's `en-US` folder — see `example_plan.json`
 
 ---
 

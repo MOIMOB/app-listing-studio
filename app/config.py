@@ -4,7 +4,9 @@ AppConfig — lightweight JSON config persisted to ~/.app_listing_studio/config.
 Schema:
 {
   "apps": [{"name": "My App", "package": "com.example.myapp"}, ...],
-  "last_copy_package": "com.example.myapp"
+  "last_copy_package": "com.example.myapp",
+  "last_plan": "C:/path/to/plan.json",          # last selected listing entry
+  "listings": ["C:/Repos/my-app", "C:/path/to/plan.json"]
 }
 """
 
@@ -63,4 +65,37 @@ class AppConfig:
     def set_last_package(package: str):
         data = _load()
         data["last_copy_package"] = package.strip()
+        _save(data)
+
+    # ── Last opened plan ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_last_plan() -> str:
+        return _load().get("last_plan", "")
+
+    @staticmethod
+    def set_last_plan(path: str):
+        data = _load()
+        data["last_plan"] = path
+        _save(data)
+
+    # ── My listings (repo folders / plan files shown in Store Preview) ────────
+
+    @staticmethod
+    def get_listings() -> list[str]:
+        return _load().get("listings", [])
+
+    @staticmethod
+    def add_listing(path: str):
+        data = _load()
+        listings = data.get("listings", [])
+        if path not in listings:
+            listings.append(path)
+        data["listings"] = listings
+        _save(data)
+
+    @staticmethod
+    def remove_listing(path: str):
+        data = _load()
+        data["listings"] = [p for p in data.get("listings", []) if p != path]
         _save(data)

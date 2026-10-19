@@ -28,6 +28,7 @@ class SidebarWidget(QWidget):
         # All registered items regardless of zone
         self._items: dict[str, tuple[QPushButton, str, str]] = {}
         self._active: str | None = None
+        self._section_labels: list[QLabel] = []
 
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(SIDEBAR_EXPANDED)
@@ -126,6 +127,15 @@ class SidebarWidget(QWidget):
         if self._active is None:
             self._select(tool_id)
 
+    def add_section(self, label: str):
+        """Start a labelled group in the main area; tools added after it fall under it."""
+        lbl = QLabel(label.upper())
+        lbl.setObjectName("sidebarSection")
+        lbl.setVisible(self._expanded)
+        pos = self._tool_layout.count() - 1
+        self._tool_layout.insertWidget(pos, lbl)
+        self._section_labels.append(lbl)
+
     def add_pinned(self, tool_id: str, icon: str, label: str):
         """Add a button pinned to the bottom strip (e.g. Settings)."""
         btn = self._make_btn(tool_id, icon, label)
@@ -162,6 +172,8 @@ class SidebarWidget(QWidget):
         self._toggle.setText("◀")
         self._toggle.setToolTip("Collapse sidebar")
         self._app_name_lbl.setVisible(True)
+        for lbl in self._section_labels:
+            lbl.setVisible(True)
         for _, (btn, icon, label) in self._items.items():
             btn.setText(f"  {icon}   {label}")
 
@@ -171,6 +183,8 @@ class SidebarWidget(QWidget):
         self._toggle.setText("▶")
         self._toggle.setToolTip("Expand sidebar")
         self._app_name_lbl.setVisible(False)
+        for lbl in self._section_labels:
+            lbl.setVisible(False)
         for _, (btn, icon, _) in self._items.items():
             btn.setText(icon)
 
@@ -191,6 +205,13 @@ class SidebarWidget(QWidget):
             }
             QLabel#sidebarTitle {
                 color: #bbc;
+            }
+            QLabel#sidebarSection {
+                color: #556;
+                font-size: 10px;
+                font-weight: bold;
+                letter-spacing: 1px;
+                padding: 14px 10px 4px 10px;
             }
             QFrame#sidebarSep {
                 background: #1a1a2e;

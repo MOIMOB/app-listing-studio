@@ -191,6 +191,10 @@ class AppWindow(QMainWindow):
         self._sidebar.add_tool(tool_id, icon, label)
         self._register_widget(tool_id, widget)
 
+    def register_section(self, label: str):
+        """Group the tools registered after this under a sidebar heading."""
+        self._sidebar.add_section(label)
+
     def register_pinned(self, tool_id: str, icon: str, label: str, widget: QWidget):
         """Add a tool button pinned to the bottom of the sidebar (e.g. Settings)."""
         self._sidebar.add_pinned(tool_id, icon, label)

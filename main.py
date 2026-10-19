@@ -1,5 +1,5 @@
 """
-App Listing Studio — Android Store Listing Asset Generator
+App Listing Studio — Play Store & App Store Listing Asset Generator
 Desktop app using PyQt6 + ADB + Pillow (Windows & Linux)
 """
 
@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QLineEdit, QComboBox, QSlider, QFileDialog,
     QScrollArea, QFrame, QColorDialog, QMessageBox, QProgressBar,
-    QSplitter, QGroupBox, QSpinBox, QCheckBox, QGridLayout, QTextEdit
+    QSplitter, QGroupBox, QSpinBox, QDoubleSpinBox, QCheckBox, QGridLayout, QTextEdit
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import (
@@ -73,6 +73,22 @@ DEVICE_FRAMES = {
         "color": "#222222", "highlight": "#323232",
         "punch_hole": False, "button_right": True,
     },
+    # iOS frames: Android status/nav bars are cropped off and replaced with iOS chrome.
+    # Screen aspect matches the App Store canvas so the iOS bars survive the fit-to-screen crop.
+    "iPhone 16 Pro Max": {
+        "width": 340, "height": 706,
+        "border": 14, "radius": 60,
+        "color": "#2b2a28", "highlight": "#4a4844",
+        "punch_hole": False, "button_right": True,
+        "platform": "ios", "dynamic_island": True, "canvas": (1320, 2868),
+    },
+    "iPad Pro 13": {
+        "width": 540, "height": 708,
+        "border": 18, "radius": 34,
+        "color": "#1c1c1e", "highlight": "#3a3a3c",
+        "punch_hole": False, "button_right": False,
+        "platform": "ios", "tablet": True, "canvas": (2064, 2752),
+    },
 }
 
 PRESETS = {
@@ -86,6 +102,25 @@ PRESETS = {
     "Custom":          None,
 }
 
+BG_STYLES = ["Gradient", "Ground"]
+
+# Variable fonts in fonts/ (weight set per use); anything else falls back to Roboto/system fonts
+FONT_FAMILIES = {
+    "Roboto": None,
+    "Schibsted Grotesk": "SchibstedGrotesk.ttf",
+}
+
+RESOLUTIONS = [
+    ("1080 × 1920  (HD)",    (1080, 1920)),
+    ("1440 × 2560  (QHD) ★", (1440, 2560)),
+    ("2160 × 3840  (4K)",    (2160, 3840)),
+    ("1600 × 2560  (7\" tablet)",  (1600, 2560)),
+    ("2160 × 2560  (10\" tablet)", (2160, 2560)),
+    ("1320 × 2868  (iPhone 6.9\")",  (1320, 2868)),
+    ("1284 × 2778  (iPhone 6.5\")", (1284, 2778)),
+    ("2064 × 2752  (iPad 13\")",    (2064, 2752)),
+]
+
 # ─── ADB Worker ───────────────────────────────────────────────────────────────
 
 class ADBWorker(QThread):
@@ -95,15 +130,19 @@ class ADBWorker(QThread):
     log = pyqtSignal(str)
     secure_flag_warning = pyqtSignal()
     avds_found = pyqtSignal(list)
+    insets_found = pyqtSignal(int, int)   # Android status bar / nav bar height in px
 
-    def __init__(self, action, device_id=None):
+    def __init__(self, action, device_id=None, platform="android"):
         super().__init__()
         self.action = action
         self.device_id = device_id
+        self.platform = platform
 
     def run(self):
         if self.action == "list":
             self._list_devices()
+        elif self.action == "screenshot" and self.platform == "ios":
+            self._take_sim_screenshot()
         elif self.action == "screenshot":
             self._take_screenshot()
 
@@ -121,11 +160,12 @@ class ADBWorker(QThread):
 
     def _list_devices(self):
         self.log.emit("Scanning for ADB devices...")
+        sims = _booted_simulators()
         code, out, err = self._run_adb(["devices", "-l"])
-        if code != 0:
+        if code != 0 and not sims:
             self.error.emit(err)
             return
-        lines = out.decode(errors="replace").strip().splitlines()[1:]
+        lines = out.decode(errors="replace").strip().splitlines()[1:] if code == 0 else []
         devices = []
         for line in lines:
             parts = line.split()
@@ -175,14 +215,15 @@ class ADBWorker(QThread):
         emulators = sum(1 for d in devices if d["is_emulator"])
         physical = len(devices) - emulators
         self.log.emit(
-            f"Found {len(devices)} device(s): {emulators} emulator(s), {physical} physical."
+            f"Found {len(devices)} device(s): {emulators} emulator(s), {physical} physical"
+            + (f", {len(sims)} iOS simulator(s)." if sims else ".")
         )
-        self.devices_found.emit(devices)
+        self.devices_found.emit(devices + sims)
 
         # List available (non-running) AVDs
         try:
             result = subprocess.run(
-                ["emulator", "-list-avds"], capture_output=True, timeout=10
+                [_emulator_path(), "-list-avds"], capture_output=True, timeout=10
             )
             all_avds = [l.strip() for l in result.stdout.decode(errors="replace").splitlines() if l.strip()]
             running_avd_names = {d.get("avd_name") for d in devices if d["is_emulator"]}
@@ -193,6 +234,9 @@ class ADBWorker(QThread):
 
     def _take_screenshot(self):
         self.log.emit(f"Capturing screenshot from {self.device_id}...")
+        insets = self._system_bar_insets()
+        if insets:
+            self.insets_found.emit(*insets)
         args = ["-s", self.device_id, "exec-out", "screencap", "-p"]
         code, out, err = self._run_adb(args, timeout=20)
         if code != 0 or len(out) < 100:
@@ -206,44 +250,175 @@ class ADBWorker(QThread):
                 self.secure_flag_warning.emit()
         except Exception:
             pass
+        if not insets:
+            try:
+                self.insets_found.emit(*_estimate_android_bars(Image.open(io.BytesIO(out)).height))
+            except Exception:
+                pass
         self.log.emit("Screenshot captured!")
         self.screenshot_done.emit(out)
 
 
+    def _take_sim_screenshot(self):
+        self.log.emit(f"Capturing screenshot from iOS Simulator {self.device_id}...")
+        try:
+            _sim_status_bar(self.device_id, clean=True)
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "shot.png")
+                result = subprocess.run(
+                    ["xcrun", "simctl", "io", self.device_id, "screenshot", "--type=png", path],
+                    capture_output=True, timeout=30,
+                )
+                if result.returncode != 0 or not os.path.exists(path):
+                    self.error.emit(f"Screenshot failed: {result.stderr.decode(errors='replace').strip()}")
+                    return
+                with open(path, "rb") as f:
+                    data = f.read()
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+            self.error.emit(f"Simulator screenshot failed: {e}")
+            return
+        self.log.emit("Screenshot captured!")
+        self.screenshot_done.emit(data)
+
+    def _system_bar_insets(self):
+        """(status_bar_px, nav_bar_px) from `dumpsys window`, or None if not parseable."""
+        import re
+        _, out, _ = self._run_adb(["-s", self.device_id, "shell", "dumpsys", "window"])
+        text = out.decode(errors="replace")
+        frame = r"frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]"
+        # Android 11-13: type=ITYPE_STATUS_BAR, Android 14+: type=statusBars
+        status = re.search(r"type=(?:ITYPE_STATUS_BAR|statusBars) " + frame, text)
+        nav = re.search(r"type=(?:ITYPE_NAVIGATION_BAR|navigationBars) " + frame, text)
+        if not status:
+            return None
+        status_h = int(status.group(4)) - int(status.group(2))
+        nav_h = int(nav.group(4)) - int(nav.group(2)) if nav else 0
+        return status_h, nav_h
+
+
+def _booted_simulators():
+    """Booted iOS Simulators (macOS only), in the same shape as ADB device dicts."""
+    if sys.platform != "darwin":
+        return []
+    import json
+    try:
+        out = subprocess.run(["xcrun", "simctl", "list", "devices", "booted", "-j"],
+                             capture_output=True, timeout=10).stdout
+        runtimes = json.loads(out)["devices"]
+    except Exception:
+        return []
+    sims = []
+    for runtime, devs in runtimes.items():
+        # "com.apple.CoreSimulator.SimRuntime.iOS-18-2" → "iOS 18.2"
+        os_name, _, ver = runtime.rsplit(".", 1)[-1].partition("-")
+        for d in devs:
+            if d.get("state") == "Booted":
+                sims.append({
+                    "serial": d["udid"], "model": d["name"], "is_emulator": True,
+                    "avd_name": None, "android_ver": "", "resolution": "",
+                    "platform": "ios", "os_ver": f"{os_name} {ver.replace('-', '.')}",
+                })
+    return sims
+
+
+def _sim_status_bar(udid, clean):
+    """Apple's marketing status bar (9:41, full signal, full battery), or clear the override."""
+    if clean:
+        args = ["override", "--time", "9:41",
+                "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
+                "--cellularMode", "active", "--cellularBars", "4",
+                "--batteryState", "charged", "--batteryLevel", "100"]
+    else:
+        args = ["clear"]
+    subprocess.run(["xcrun", "simctl", "status_bar", udid] + args, capture_output=True, timeout=15)
+
+
 # ─── Emulator Start Worker ────────────────────────────────────────────────────
 
+def _emulator_path():
+    """The Android emulator binary: PATH first, then the usual SDK locations."""
+    import shutil
+    found = shutil.which("emulator")
+    if found:
+        return found
+    exe = "emulator.exe" if sys.platform == "win32" else "emulator"
+    roots = [os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT")]
+    if sys.platform == "win32":
+        roots.append(os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk"))
+    else:
+        roots += [os.path.expanduser("~/Android/Sdk"), os.path.expanduser("~/Library/Android/sdk")]
+    for root in roots:
+        if root and os.path.exists(os.path.join(root, "emulator", exe)):
+            return os.path.join(root, "emulator", exe)
+    return "emulator"
+
+
+def _running_emulators():
+    """{avd_name: serial} for booted emulators."""
+    running = {}
+    result = subprocess.run(["adb", "devices"], capture_output=True, timeout=5)
+    for line in result.stdout.decode(errors="replace").strip().splitlines()[1:]:
+        serial, _, state = line.partition("\t")
+        if state.strip() != "device" or not serial.startswith("emulator-"):
+            continue
+        out = subprocess.run(["adb", "-s", serial, "emu", "avd", "name"], capture_output=True, timeout=5)
+        lines = out.stdout.decode(errors="replace").strip().splitlines()
+        if lines:
+            running[lines[0].strip()] = serial
+    return running
+
+
 class EmulatorStartWorker(QThread):
-    device_ready = pyqtSignal()
+    device_ready = pyqtSignal(str)   # serial
     log = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, avd_name):
+    def __init__(self, avd_name, rotation=None):
         super().__init__()
         self.avd_name = avd_name
+        self.rotation = rotation
 
     def run(self):
-        self.log.emit(f"Starting emulator '{self.avd_name}'...")
-        try:
-            subprocess.Popen(["emulator", "-avd", self.avd_name])
-        except FileNotFoundError:
-            self.error.emit("emulator not found in PATH. Make sure Android SDK emulator is installed.")
-            return
-
         import time
-        self.log.emit("Waiting for emulator to boot (this may take a minute)...")
-        for _ in range(60):
-            time.sleep(3)
+        try:
+            serial = _running_emulators().get(self.avd_name)
+        except Exception:
+            serial = None
+
+        if not serial:
+            self.log.emit(f"Starting emulator '{self.avd_name}'...")
             try:
-                result = subprocess.run(["adb", "devices"], capture_output=True, timeout=5)
-                lines = result.stdout.decode(errors="replace").strip().splitlines()[1:]
-                for line in lines:
-                    if "\tdevice" in line and "emulator" in line:
-                        self.log.emit("Emulator ready!")
-                        self.device_ready.emit()
-                        return
-            except Exception:
-                pass
-        self.error.emit("Emulator timed out after 3 minutes. Try clicking ⟳ Scan manually.")
+                subprocess.Popen([_emulator_path(), "-avd", self.avd_name],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except FileNotFoundError:
+                self.error.emit("emulator not found. Install the Android SDK emulator or set ANDROID_HOME.")
+                return
+
+            self.log.emit("Waiting for emulator to boot (this may take a minute)...")
+            for _ in range(60):
+                time.sleep(3)
+                try:
+                    serial = _running_emulators().get(self.avd_name)
+                    if serial:
+                        boot = subprocess.run(["adb", "-s", serial, "shell", "getprop", "sys.boot_completed"],
+                                              capture_output=True, timeout=5)
+                        if boot.stdout.decode(errors="replace").strip() == "1":
+                            break
+                    serial = None
+                except Exception:
+                    pass
+            if not serial:
+                self.error.emit("Emulator timed out after 3 minutes. Try clicking ⟳ Scan manually.")
+                return
+
+        if self.rotation is not None:
+            # Lock orientation (e.g. 1 = portrait on landscape-first tablets)
+            subprocess.run(["adb", "-s", serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
+                           capture_output=True, timeout=10)
+            subprocess.run(["adb", "-s", serial, "shell", "settings", "put", "system", "user_rotation", str(self.rotation)],
+                           capture_output=True, timeout=10)
+        self.log.emit(f"Emulator '{self.avd_name}' ready ({serial}).")
+        self.device_ready.emit(serial)
 
 
 # ─── Image Composer ───────────────────────────────────────────────────────────
@@ -260,56 +435,87 @@ def compose_image(
     phone_offset_y=0,
     canvas_w=1440,
     canvas_h=2560,
+    bg_style="Gradient",
+    ground_at=0.72,
+    noise=True,
+    text_shadow=None,
+    font_family="Roboto",
+    title_weight=700,
+    subtitle_weight=400,
+    tracking=0.0,
+    android_bars=None,
+    ios_native=False,
 ):
-    """Compose final store listing image."""
+    """Compose final store listing image.
+
+    bg_style: "Gradient" (bg_color1 → bg_color2, top to bottom) or
+    "Ground" (flat bg_color1 with a bg_color2 band from ground_at × height down).
+    tracking: letter spacing in em (e.g. -0.04).
+    android_bars: (status_px, nav_px) to crop off the screenshot for iOS frames;
+    None estimates them from the screenshot height.
+    ios_native: screenshot already has iOS chrome (e.g. from the iOS Simulator); skip the swap.
+    """
 
     img = Image.new("RGB", (canvas_w, canvas_h))
     draw = ImageDraw.Draw(img)
 
-    # ── Background gradient ──
     c1 = _hex_to_rgb(bg_color1)
     c2 = _hex_to_rgb(bg_color2)
-    for y in range(canvas_h):
-        t = y / canvas_h
-        r = int(c1[0] + (c2[0] - c1[0]) * t)
-        g = int(c1[1] + (c2[1] - c1[1]) * t)
-        b = int(c1[2] + (c2[2] - c1[2]) * t)
-        draw.line([(0, y), (canvas_w, y)], fill=(r, g, b))
+    if bg_style == "Ground":
+        # ── Flat background with a ground band ──
+        ground_y = int(canvas_h * ground_at)
+        draw.rectangle([0, 0, canvas_w, ground_y], fill=c1)
+        draw.rectangle([0, ground_y, canvas_w, canvas_h], fill=c2)
+    else:
+        # ── Background gradient ──
+        for y in range(canvas_h):
+            t = y / canvas_h
+            r = int(c1[0] + (c2[0] - c1[0]) * t)
+            g = int(c1[1] + (c2[1] - c1[1]) * t)
+            b = int(c1[2] + (c2[2] - c1[2]) * t)
+            draw.line([(0, y), (canvas_w, y)], fill=(r, g, b))
 
     # ── Subtle noise texture ──
-    import random
-    rng = random.Random(42)
-    for _ in range(8000):
-        x = rng.randint(0, canvas_w - 1)
-        y = rng.randint(0, canvas_h - 1)
-        v = rng.randint(0, 30)
-        px = img.getpixel((x, y))
-        img.putpixel((x, y), tuple(min(255, p + v) for p in px))
+    if noise:
+        import random
+        rng = random.Random(42)
+        for _ in range(8000):
+            x = rng.randint(0, canvas_w - 1)
+            y = rng.randint(0, canvas_h - 1)
+            v = rng.randint(0, 30)
+            px = img.getpixel((x, y))
+            img.putpixel((x, y), tuple(min(255, p + v) for p in px))
 
     draw = ImageDraw.Draw(img)
+
+    if text_shadow is None:
+        text_shadow = shadow_enabled
 
     # ── Text area: top 38% ──
     text_area_h = int(canvas_h * 0.38)
 
     # Scale font sizes proportionally to canvas vs baseline 1440×2560
     scale_f = canvas_w / 1440
-    title_font = _load_font(int(title_size * scale_f), bold=True)
-    subtitle_font = _load_font(int(subtitle_size * scale_f), bold=False)
+    title_px = int(title_size * scale_f)
+    subtitle_px = int(subtitle_size * scale_f)
+    title_font = _load_font(title_px, bold=True, family=font_family, weight=title_weight)
+    subtitle_font = _load_font(subtitle_px, bold=False, family=font_family, weight=subtitle_weight)
 
     # Draw title
     title_y = int(text_area_h * 0.28)
-    _draw_text_centered(
+    title_bottom = _draw_text_centered(
         draw, img, title_text, canvas_w // 2, title_y,
         title_font, _hex_to_rgb(title_color),
-        shadow=shadow_enabled, max_width=canvas_w - int(120 * scale_f)
+        shadow=text_shadow, max_width=canvas_w - int(120 * scale_f),
+        tracking=tracking * title_px,
     )
 
-    # Draw subtitle
-    subtitle_y = title_y + int(title_size * scale_f) + int(28 * scale_f)
+    # Draw subtitle (below the title, however many lines it wrapped to)
+    subtitle_y = max(title_y + title_px + int(28 * scale_f), title_bottom + int(16 * scale_f))
     _draw_text_centered(
         draw, img, subtitle_text, canvas_w // 2, subtitle_y,
         subtitle_font, _hex_to_rgb(subtitle_color),
-        shadow=shadow_enabled, max_width=canvas_w - int(160 * scale_f)
+        shadow=text_shadow, max_width=canvas_w - int(160 * scale_f),
     )
 
     # ── Device frame ──
@@ -356,6 +562,8 @@ def compose_image(
     if screenshot_bytes:
         try:
             screen_img = Image.open(io.BytesIO(screenshot_bytes)).convert("RGB")
+            if frame.get("platform") == "ios" and not ios_native:
+                screen_img = _iosify_screen(screen_img, sw, sh, android_bars, tablet=frame.get("tablet", False))
             # Crop/fit to screen area
             img_aspect = screen_img.width / screen_img.height
             screen_aspect = sw / sh
@@ -385,6 +593,12 @@ def compose_image(
         draw.rectangle([sx, sy, sx + sw, sy + sh], fill=(20, 20, 35))
         draw.text((sx + sw // 2, sy + sh // 2), "No Screenshot", fill=(100, 100, 130), anchor="mm", font=_load_font(28))
 
+    # Dynamic Island (iPhone 16 Pro Max proportions: 126×37pt, 11pt from top of a 440pt-wide screen)
+    if frame.get("dynamic_island"):
+        u = sw / 440
+        iw, ih = int(126 * u), int(37 * u)
+        _rounded_rect(draw, sx + (sw - iw) // 2, sy + int(11 * u), iw, ih, ih // 2, (0, 0, 0))
+
     # Punch-hole camera
     if frame.get("punch_hole"):
         cam_x = fx + fw // 2
@@ -405,13 +619,125 @@ def compose_image(
     return img
 
 
+def _iosify_screen(img, sw, sh, android_bars, tablet=False):
+    """Replace the Android status/nav bars of a screenshot with iOS chrome, sized sw×sh.
+
+    Crops the Android bars, fits the app content between an iOS status bar and the
+    home-indicator area (both filled with the colour at the content's edge), then draws
+    the 9:41 clock, signal/wifi/battery icons and the home indicator.
+    """
+    if android_bars is None:
+        android_bars = _estimate_android_bars(img.height)
+    top, bottom = android_bars
+    content = img.crop((0, top, img.width, img.height - bottom))
+
+    # iOS geometry in points; u = px per point
+    if tablet:   # iPad Pro 13": 1032pt wide, 24pt status bar, 20pt home-indicator area
+        u = sw / 1032
+        bar_h, home_h = int(24 * u), int(20 * u)
+    else:        # iPhone 16 Pro Max: 440pt wide, 62pt status bar, 34pt home-indicator area
+        u = sw / 440
+        bar_h, home_h = int(62 * u), int(34 * u)
+
+    # Fit content into the area between the bars (cover; top-anchored so the app header survives)
+    area_h = sh - bar_h - home_h
+    scale = max(sw / content.width, area_h / content.height)
+    cw, ch = max(sw, round(content.width * scale)), max(area_h, round(content.height * scale))
+    content = content.resize((cw, ch), Image.LANCZOS)
+    cx = (cw - sw) // 2
+    content = content.crop((cx, 0, cx + sw, area_h))
+
+    top_color = _edge_color(content, 0)
+    bottom_color = _edge_color(content, content.height - 1)
+    out = Image.new("RGB", (sw, sh), top_color)
+    out.paste(Image.new("RGB", (sw, home_h), bottom_color), (0, sh - home_h))
+    out.paste(content, (0, bar_h))
+
+    # Chrome is drawn 3× oversized on a transparent layer, then downsampled for anti-aliasing
+    ss = 3
+    layer = Image.new("RGBA", (sw * ss, sh * ss), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    p = u * ss
+    fg = _contrast_color(top_color)
+
+    if tablet:
+        mid_y = 12 * p
+        time_x, time_anchor, right_x, font_pt = 20 * p, "lm", (1032 - 20) * p, 15
+    else:
+        mid_y = 29.5 * p   # vertically centred on the Dynamic Island
+        time_x, time_anchor, right_x, font_pt = 82 * p, "mm", 384 * p, 17
+    d.text((time_x, mid_y), "9:41", fill=fg, anchor=time_anchor,
+           font=_load_font(int(font_pt * p), bold=True, family="Schibsted Grotesk", weight=600))
+
+    # Right cluster, laid out right-to-left: battery, wifi, cellular (cellular phone-only)
+    x = right_x
+    bw, bh = 25 * p, 12 * p
+    x -= 2 * p
+    _rounded_rect(d, int(x - bw), int(mid_y - bh / 2), int(bw), int(bh), int(3.5 * p), fg[:3] + (90,))
+    inset = 2 * p
+    _rounded_rect(d, int(x - bw + inset), int(mid_y - bh / 2 + inset),
+                  int(bw - 2 * inset), int(bh - 2 * inset), int(2 * p), fg)
+    d.rounded_rectangle([x + 1 * p, mid_y - 2 * p, x + 2.5 * p, mid_y + 2 * p], radius=int(p), fill=fg[:3] + (110,))
+    x -= bw + 5 * p
+
+    ww = 16 * p                     # wifi: three concentric arcs fanning up from a point
+    wcx, wcy = x - ww / 2, mid_y + 5.5 * p
+    for r in (11.5 * p, 7.5 * p):
+        d.arc([wcx - r, wcy - r, wcx + r, wcy + r], 225, 315, fill=fg, width=int(2.4 * p))
+    r = 3.5 * p
+    d.pieslice([wcx - r, wcy - r, wcx + r, wcy + r], 225, 315, fill=fg)
+    x -= ww + 5 * p
+
+    if not tablet:                  # cellular: four rising bars
+        bar_w, gap = 3 * p, 1.6 * p
+        for i in range(4):
+            h = (4 + i * 2.6) * p
+            bx = x - (4 - i) * bar_w - (3 - i) * gap
+            d.rounded_rectangle([bx, mid_y + 5.5 * p - h, bx + bar_w, mid_y + 5.5 * p], radius=int(p), fill=fg)
+
+    # Home indicator
+    hw, hh = (315 if tablet else 139) * p, 5 * p
+    hy = (sh * ss) - 8 * p - hh
+    d.rounded_rectangle([(sw * ss - hw) / 2, hy, (sw * ss + hw) / 2, hy + hh], radius=int(hh / 2),
+                        fill=_contrast_color(bottom_color))
+
+    layer = layer.resize((sw, sh), Image.LANCZOS)
+    return Image.alpha_composite(out.convert("RGBA"), layer).convert("RGB")
+
+
+def _estimate_android_bars(height):
+    """Fallback (status, nav) bar heights for screenshots without device-reported insets."""
+    return round(height * 0.05), round(height * 0.026)
+
+
+def _edge_color(img, y):
+    """Most common colour in row y, used to extend the app background under the iOS bars."""
+    row = img.crop((0, y, img.width, y + 1))
+    return max(row.getcolors(img.width), key=lambda c: c[0])[1]
+
+
+def _contrast_color(rgb):
+    lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+    return (0, 0, 0, 255) if lum > 150 else (255, 255, 255, 255)
+
+
 def _hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip("#")
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
 
-def _load_font(size, bold=False):
+def _load_font(size, bold=False, family="Roboto", weight=None):
     _here = os.path.dirname(os.path.abspath(__file__))
+    # family is a bundled family name, or a path to a .ttf/.otf/.woff2 (e.g. the app's own font)
+    variable = FONT_FAMILIES.get(family) or (family if family and os.path.isfile(family) else None)
+    if variable:
+        try:
+            font = ImageFont.truetype(os.path.join(_here, "fonts", variable), size)
+            if font.get_variation_axes():
+                font.set_variation_by_axes([weight or (700 if bold else 400)])
+            return font
+        except Exception:
+            pass
     candidates = [
         os.path.join(_here, "fonts", "Roboto-Bold.ttf" if bold else "Roboto.ttf"),
         "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
@@ -429,30 +755,51 @@ def _load_font(size, bold=False):
     return ImageFont.load_default()
 
 
-def _draw_text_centered(draw, img, text, cx, y, font, color, shadow=True, max_width=900):
-    """Draw centered text with optional drop shadow, wrapping if needed."""
-    lines = _wrap_text(draw, text, font, max_width)
+def _draw_text_centered(draw, img, text, cx, y, font, color, shadow=True, max_width=900, tracking=0.0):
+    """Draw centered text with optional drop shadow, wrapping if needed.
+
+    tracking: extra px between characters (negative = tighter). Returns the y below the last line.
+    """
+    lines = _wrap_text(draw, text, font, max_width, tracking)
     try:
         bbox = font.getbbox("Ay")
         line_h = bbox[3] - bbox[1] + 12
     except:
         line_h = font.size + 12
 
+    shadow_fill = (0, 0, 0, 120) if len(color) == 4 else (0, 0, 0)
     for i, line in enumerate(lines):
         ly = y + i * line_h
         if shadow:
-            draw.text((cx + 3, ly + 3), line, fill=(0, 0, 0, 120) if len(color) == 4 else (0, 0, 0), font=font, anchor="mt")
-        draw.text((cx, ly), line, fill=color, font=font, anchor="mt")
+            _draw_line(draw, cx + 3, ly + 3, line, font, shadow_fill, tracking)
+        _draw_line(draw, cx, ly, line, font, color, tracking)
+    return y + len(lines) * line_h
 
 
-def _wrap_text(draw, text, font, max_width):
+def _draw_line(draw, cx, y, line, font, fill, tracking):
+    if not tracking:
+        draw.text((cx, y), line, fill=fill, font=font, anchor="mt")
+        return
+    # Per-character placement keeps kerning (prefix widths) and adds tracking
+    # Same top edge as anchor "mt" on the whole line, then every char on one baseline
+    x0 = cx - _line_width(font, line, tracking) / 2
+    baseline = y - font.getbbox(line, anchor="ls")[1]
+    for i, ch in enumerate(line):
+        draw.text((x0 + font.getlength(line[:i]) + i * tracking, baseline), ch, fill=fill, font=font, anchor="ls")
+
+
+def _line_width(font, text, tracking=0.0):
+    return font.getlength(text) + tracking * max(len(text) - 1, 0)
+
+
+def _wrap_text(draw, text, font, max_width, tracking=0.0):
     words = text.split()
     lines = []
     current = ""
     for word in words:
         test = (current + " " + word).strip()
         try:
-            w = font.getlength(test)
+            w = _line_width(font, test, tracking)
         except:
             w = len(test) * font.size * 0.6
         if w <= max_width:
@@ -815,8 +1162,35 @@ class ScreenshotStudioPanel(QWidget):
         self._frame_combo = QComboBox()
         for name in DEVICE_FRAMES:
             self._frame_combo.addItem(name)
-        self._frame_combo.currentTextChanged.connect(self._schedule_preview)
+        self._frame_combo.currentTextChanged.connect(self._on_frame_changed)
         self._row("Device Frame:", self._frame_combo, l)
+
+        # iOS frames: Android bars to crop (auto-filled from the device on capture)
+        self._ios_row = QWidget()
+        ios_layout = QHBoxLayout(self._ios_row)
+        ios_layout.setContentsMargins(0, 0, 0, 0)
+        lbl_crop = QLabel("Crop Android:")
+        lbl_crop.setFixedWidth(110)
+        lbl_crop.setStyleSheet("color:#8890aa; font-size:12px;")
+        lbl_crop.setToolTip("Status bar (top) and nav bar (bottom) heights to strip before drawing iOS bars")
+        self._crop_top = QSpinBox()
+        self._crop_bottom = QSpinBox()
+        for spin, prefix in ((self._crop_top, "top "), (self._crop_bottom, "bottom ")):
+            spin.setRange(0, 600)
+            spin.setPrefix(prefix)
+            spin.setSuffix(" px")
+            spin.valueChanged.connect(self._schedule_preview)
+        self._ios_native_cb = QCheckBox("Native iOS")
+        self._ios_native_cb.setToolTip("Screenshot already has iOS bars (e.g. from the iOS Simulator) — skip the swap")
+        self._ios_native_cb.toggled.connect(lambda on: (
+            self._crop_top.setEnabled(not on), self._crop_bottom.setEnabled(not on), self._schedule_preview()
+        ))
+        ios_layout.addWidget(lbl_crop)
+        ios_layout.addWidget(self._crop_top, 1)
+        ios_layout.addWidget(self._crop_bottom, 1)
+        ios_layout.addWidget(self._ios_native_cb)
+        self._ios_row.setVisible(False)
+        l.addWidget(self._ios_row)
 
         # Phone size slider
         size_row = QHBoxLayout()
@@ -898,11 +1272,35 @@ class ScreenshotStudioPanel(QWidget):
         row2.addStretch()
         l.addLayout(row2)
 
-        # Shadow toggle
+        # Style: gradient, or flat colour (Top) with a ground band (Bottom)
+        self._bg_style_combo = QComboBox()
+        self._bg_style_combo.addItems(BG_STYLES)
+        self._bg_style_combo.currentTextChanged.connect(self._schedule_preview)
+        self._row("Style:", self._bg_style_combo, l)
+
+        self._ground_at = QSpinBox()
+        self._ground_at.setRange(0, 100)
+        self._ground_at.setValue(72)
+        self._ground_at.setSuffix(" %")
+        self._ground_at.setToolTip("Ground style: where the bottom band starts, from the top")
+        self._ground_at.valueChanged.connect(self._schedule_preview)
+        self._row("Ground at:", self._ground_at, l)
+
+        self._noise_cb = QCheckBox("Noise texture")
+        self._noise_cb.setChecked(True)
+        self._noise_cb.stateChanged.connect(self._schedule_preview)
+        l.addWidget(self._noise_cb)
+
+        # Shadow toggles
         self._shadow_cb = QCheckBox("Device shadow")
         self._shadow_cb.setChecked(True)
         self._shadow_cb.stateChanged.connect(self._schedule_preview)
         l.addWidget(self._shadow_cb)
+
+        self._text_shadow_cb = QCheckBox("Text shadow")
+        self._text_shadow_cb.setChecked(True)
+        self._text_shadow_cb.stateChanged.connect(self._schedule_preview)
+        l.addWidget(self._text_shadow_cb)
 
     def _build_text_section(self):
         g, l = self._section("✏️ Text")
@@ -951,6 +1349,45 @@ class ScreenshotStudioPanel(QWidget):
         row_sc.addWidget(self._sub_size)
         l.addLayout(row_sc)
 
+        # Font
+        self._font_combo = QComboBox()
+        self._font_combo.addItems(FONT_FAMILIES)
+        self._font_combo.currentTextChanged.connect(self._schedule_preview)
+        self._row("Font:", self._font_combo, l)
+
+        row_w = QHBoxLayout()
+        lbl_w = QLabel("Weight:")
+        lbl_w.setFixedWidth(110)
+        lbl_w.setStyleSheet("color:#8890aa; font-size:12px;")
+        self._title_weight = QSpinBox()
+        self._title_weight.setRange(100, 900)
+        self._title_weight.setSingleStep(100)
+        self._title_weight.setValue(700)
+        self._title_weight.setToolTip("Title weight (variable fonts only)")
+        self._title_weight.valueChanged.connect(self._schedule_preview)
+        self._sub_weight = QSpinBox()
+        self._sub_weight.setRange(100, 900)
+        self._sub_weight.setSingleStep(100)
+        self._sub_weight.setValue(400)
+        self._sub_weight.setToolTip("Subtitle weight (variable fonts only)")
+        self._sub_weight.valueChanged.connect(self._schedule_preview)
+        row_w.addWidget(lbl_w)
+        row_w.addWidget(QLabel("Title"))
+        row_w.addWidget(self._title_weight)
+        row_w.addWidget(QLabel("Sub"))
+        row_w.addWidget(self._sub_weight)
+        l.addLayout(row_w)
+
+        self._tracking = QDoubleSpinBox()
+        self._tracking.setRange(-0.2, 0.2)
+        self._tracking.setSingleStep(0.01)
+        self._tracking.setDecimals(2)
+        self._tracking.setValue(0.0)
+        self._tracking.setSuffix(" em")
+        self._tracking.setToolTip("Title letter spacing")
+        self._tracking.valueChanged.connect(self._schedule_preview)
+        self._row("Title tracking:", self._tracking, l)
+
     def _build_export_section(self):
         g, l = self._section("💾 Export")
 
@@ -959,9 +1396,8 @@ class ScreenshotStudioPanel(QWidget):
         lbl.setFixedWidth(80)
         lbl.setStyleSheet("color:#8890aa; font-size:12px;")
         self._resolution_combo = QComboBox()
-        self._resolution_combo.addItem("1080 × 1920  (HD)",    (1080, 1920))
-        self._resolution_combo.addItem("1440 × 2560  (QHD) ★", (1440, 2560))
-        self._resolution_combo.addItem("2160 × 3840  (4K)",    (2160, 3840))
+        for label, size in RESOLUTIONS:
+            self._resolution_combo.addItem(label, size)
         self._resolution_combo.setCurrentIndex(1)
         self._resolution_combo.currentIndexChanged.connect(self._schedule_preview)
         res_row.addWidget(lbl)
@@ -1046,6 +1482,9 @@ class ScreenshotStudioPanel(QWidget):
         self._device_combo.clear()
         if devices:
             for d in devices:
+                if d.get("platform") == "ios":
+                    self._device_combo.addItem(f"🍎  {d['model']}  [Simulator]  ({d['serial'][:8]})", d["serial"])
+                    continue
                 if d["is_emulator"]:
                     label = f"🖥  {d['avd_name'] or d['model']}  ({d['serial']})"
                 else:
@@ -1054,12 +1493,17 @@ class ScreenshotStudioPanel(QWidget):
                     label.replace("(", "[Emulator]  (" if d["is_emulator"] else "[Physical]  ("),
                     d["serial"]
                 )
-            self._on_device_selected(0)
+            wanted = self._device_combo.findData(getattr(self, "_select_serial", None))
+            self._select_serial = None
+            if wanted > 0:
+                self._device_combo.setCurrentIndex(wanted)   # fires _on_device_selected
+            else:
+                self._on_device_selected(0)
         else:
             self._device_combo.addItem("No devices — connect via USB or start an emulator")
             self._device_info_label.setText("")
         # Sync device list into the embedded Copy Prefs panel
-        self._copy_prefs_panel.set_devices(devices)
+        self._copy_prefs_panel.set_devices([d for d in devices if d.get("platform") != "ios"])
 
     def _on_device_selected(self, index):
         """Update device info badge when selection changes."""
@@ -1067,6 +1511,12 @@ class ScreenshotStudioPanel(QWidget):
             self._device_info_label.setText("")
             return
         d = self._devices[index]
+        if d.get("platform") == "ios":
+            self._device_info_label.setText(f"{d['os_ver']}  ·  iOS Simulator — native iOS screenshots")
+            self._device_info_label.setStyleSheet("color:#3a8a3a; font-size:11px; padding:2px 0;")
+            if not self._plan:
+                self._frame_combo.setCurrentText("iPad Pro 13" if "ipad" in d["model"].lower() else "iPhone 16 Pro Max")
+            return
         parts = []
         if d["android_ver"]:
             parts.append(f"Android {d['android_ver']}")
@@ -1080,7 +1530,9 @@ class ScreenshotStudioPanel(QWidget):
             self._device_info_label.setStyleSheet("color:#667; font-size:11px; padding:2px 0;")
         self._device_info_label.setText("  ·  ".join(parts))
 
-        # Auto-suggest device frame based on model name
+        # Auto-suggest device frame based on model name (a loaded plan picks its own)
+        if self._plan:
+            return
         model_lower = d["model"].lower()
         avd_lower = (d.get("avd_name") or "").lower()
         combined = model_lower + avd_lower
@@ -1119,10 +1571,33 @@ class ScreenshotStudioPanel(QWidget):
         self._emu_worker = worker
         worker.start()
 
-    def _on_emulator_ready(self):
+    def _on_emulator_ready(self, serial=None):
         self._start_avd_btn.setEnabled(True)
         self._progress.setVisible(False)
+        self._select_serial = serial
         self._refresh_devices()
+
+    def _plan_use_avd(self, avd_name, rotation=None):
+        """Start (or reuse) the plan device's emulator and select it once booted."""
+        if getattr(self, "_plan_avd_active", None) == (avd_name, rotation):
+            return
+        self._plan_avd_active = (avd_name, rotation)
+        self._progress.setVisible(True)
+        self._capture_btn.setEnabled(False)
+        worker = EmulatorStartWorker(avd_name, rotation)
+        worker.log.connect(self._log)
+        worker.error.connect(lambda msg: (
+            self._on_adb_error(msg),
+            self._progress.setVisible(False),
+            self._capture_btn.setEnabled(True),
+            setattr(self, "_plan_avd_active", None),
+        ))
+        worker.device_ready.connect(lambda serial: (
+            self._capture_btn.setEnabled(True),
+            self._on_emulator_ready(serial),
+        ))
+        self._emu_worker = worker
+        worker.start()
 
     def _on_adb_error(self, msg):
         self._log(f"⚠ {msg}")
@@ -1130,7 +1605,7 @@ class ScreenshotStudioPanel(QWidget):
 
     def _capture_screenshot(self):
         if not self._devices:
-            QMessageBox.information(self, "No Device", "No ADB device found.\n\nMake sure:\n• USB debugging is ON\n• Device is connected\n• adb.exe is in PATH")
+            QMessageBox.information(self, "No Device", "No device found.\n\nMake sure:\n• USB debugging is ON and the device is connected, or an emulator / iOS Simulator is booted\n• adb is in PATH")
             return
         serial = self._device_combo.currentData()
         if not serial:
@@ -1140,17 +1615,48 @@ class ScreenshotStudioPanel(QWidget):
         self._secure_warning.setVisible(False)
         self._log("Capturing screenshot...")
 
-        worker = ADBWorker("screenshot", device_id=serial)
+        self._capture_platform = self._current_platform()
+        worker = ADBWorker("screenshot", device_id=serial, platform=self._capture_platform)
         worker.screenshot_done.connect(self._on_screenshot_done)
         worker.error.connect(self._on_adb_error)
         worker.log.connect(self._log)
         worker.secure_flag_warning.connect(self._on_secure_flag_warning)
+        worker.insets_found.connect(self._on_insets_found)
         worker.finished.connect(lambda: (
             self._progress.setVisible(False),
             self._capture_btn.setEnabled(True)
         ))
         self._adb_worker = worker
         worker.start()
+
+    def _current_platform(self):
+        idx = self._device_combo.currentIndex()
+        if 0 <= idx < len(self._devices):
+            return self._devices[idx].get("platform", "android")
+        return "android"
+
+    def _on_frame_changed(self, name):
+        frame = DEVICE_FRAMES.get(name, {})
+        self._ios_row.setVisible(frame.get("platform") == "ios")
+        # Jump to the App Store canvas size; a plan's canvas_w/h is applied after this
+        if frame.get("canvas"):
+            idx = self._resolution_combo.findData(frame["canvas"])
+            if idx >= 0:
+                self._resolution_combo.setCurrentIndex(idx)
+        self._schedule_preview()
+
+    def _on_insets_found(self, status_h, nav_h):
+        self._crop_top.setValue(status_h)
+        self._crop_bottom.setValue(nav_h)
+        self._log(f"Android bars: status {status_h}px, nav {nav_h}px")
+
+    def _set_estimated_insets(self, data):
+        try:
+            top, bottom = _estimate_android_bars(Image.open(io.BytesIO(data)).height)
+            self._crop_top.setValue(top)
+            self._crop_bottom.setValue(bottom)
+        except Exception:
+            pass
 
     def _on_secure_flag_warning(self):
         self._secure_warning.setVisible(True)
@@ -1160,6 +1666,13 @@ class ScreenshotStudioPanel(QWidget):
         serial = self._device_combo.currentData()
         if not serial:
             QMessageBox.information(self, "No Device", "Select a device first.")
+            return
+
+        if self._current_platform() == "ios":
+            _sim_status_bar(serial, clean=enable)
+            self._log("Simulator status bar: 9:41, full signal." if enable else "Simulator status bar restored.")
+            self._demo_btn.setVisible(not enable)
+            self._demo_exit_btn.setVisible(enable)
             return
 
         def shell(cmd):
@@ -1209,6 +1722,7 @@ class ScreenshotStudioPanel(QWidget):
             self._plan_dir = os.path.dirname(path)
             self._plan_device_idx = 0
             self._plan_screenshot_idx = 0
+            self._plan_avd_active = None
             self._plan_apply_step(0, 0)
             self._batch_widget.setVisible(True)
             total = len(self._plan_devices) * len(self._plan)
@@ -1270,13 +1784,32 @@ class ScreenshotStudioPanel(QWidget):
             self._phone_offset_slider.setValue(cfg["phone_offset_y"])
         if cfg.get("shadow") is not None:
             self._shadow_cb.setChecked(cfg["shadow"])
+        self._text_shadow_cb.setChecked(cfg.get("text_shadow", self._shadow_cb.isChecked()))
+        if cfg.get("bg_style") in BG_STYLES:
+            self._bg_style_combo.setCurrentText(cfg["bg_style"])
+        if cfg.get("ground_at") is not None:
+            self._ground_at.setValue(cfg["ground_at"])
+        if cfg.get("noise") is not None:
+            self._noise_cb.setChecked(cfg["noise"])
+        if cfg.get("font") in FONT_FAMILIES:
+            self._font_combo.setCurrentText(cfg["font"])
+        if cfg.get("title_weight"):
+            self._title_weight.setValue(cfg["title_weight"])
+        if cfg.get("subtitle_weight"):
+            self._sub_weight.setValue(cfg["subtitle_weight"])
+        if cfg.get("tracking") is not None:
+            self._tracking.setValue(cfg["tracking"])
         if cfg.get("frame") and cfg["frame"] in DEVICE_FRAMES:
             self._frame_combo.setCurrentText(cfg["frame"])
         if cfg.get("canvas_w") and cfg.get("canvas_h"):
-            for i in range(self._resolution_combo.count()):
-                if self._resolution_combo.itemData(i) == (cfg["canvas_w"], cfg["canvas_h"]):
-                    self._resolution_combo.setCurrentIndex(i)
-                    break
+            size = (cfg["canvas_w"], cfg["canvas_h"])
+            idx = self._resolution_combo.findData(size)
+            if idx < 0:
+                self._resolution_combo.addItem(f"{size[0]} × {size[1]}  (plan)", size)
+                idx = self._resolution_combo.count() - 1
+            self._resolution_combo.setCurrentIndex(idx)
+        if cfg.get("avd"):
+            self._plan_use_avd(cfg["avd"], cfg.get("rotation"))
         preset = cfg.get("preset")
         if preset and preset in PRESETS:
             self._preset_combo.setCurrentText(preset)
@@ -1293,6 +1826,7 @@ class ScreenshotStudioPanel(QWidget):
         self._plan_screenshot_idx = 0
         self._plan_dir = ""
         self._plan_output_dir = ""
+        self._plan_avd_active = None
         self._batch_widget.setVisible(False)
         self._log("Plan cleared.")
 
@@ -1314,23 +1848,25 @@ class ScreenshotStudioPanel(QWidget):
                 self._log(f"Auto-export failed: {e}")
         threading.Thread(target=_run, daemon=True).start()
 
-    def _save_raw_screenshot(self, data):
+    def _save_raw_screenshot(self, data, prefix="capture"):
         """Save raw capture to screenshots/ for later reuse."""
         try:
             from datetime import datetime
             shots_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "screenshots")
             os.makedirs(shots_dir, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            path = os.path.join(shots_dir, f"capture_{ts}.png")
+            path = os.path.join(shots_dir, f"{prefix}_{ts}.png")
             with open(path, "wb") as f:
                 f.write(data)
-            self._log(f"✓ Capture saved: screenshots/capture_{ts}.png")
+            self._log(f"✓ Capture saved: screenshots/{prefix}_{ts}.png")
         except Exception as e:
             self._log(f"Could not save capture: {e}")
 
     def _on_screenshot_done(self, data):
         self._screenshot_bytes = data
-        self._save_raw_screenshot(data)
+        is_ios = getattr(self, "_capture_platform", "android") == "ios"
+        self._ios_native_cb.setChecked(is_ios)
+        self._save_raw_screenshot(data, "capture_ios" if is_ios else "capture")
         try:
             img = Image.open(io.BytesIO(data))
             self._shot_info.setText(f"✓ Screenshot: {img.width}×{img.height}px")
@@ -1344,9 +1880,9 @@ class ScreenshotStudioPanel(QWidget):
             device = self._plan_devices[di]
             shot = self._plan[si]
             cfg = {**self._plan_defaults, **device, **shot}
-            filename = cfg.get("filename", f"screenshot_{si + 1:02d}.png")
+            filename = device.get("filename_prefix", "") + cfg.get("filename", f"screenshot_{si + 1:02d}.png")
             fastlane_dir = device.get("fastlane_dir", device.get("name", f"device{di+1}"))
-            out_dir = getattr(self, "_plan_output_dir", "")
+            out_dir = device.get("output_dir", getattr(self, "_plan_output_dir", ""))
             base = os.path.join(self._plan_dir, out_dir, fastlane_dir)
             os.makedirs(base, exist_ok=True)
             path = os.path.join(base, filename)
@@ -1366,6 +1902,8 @@ class ScreenshotStudioPanel(QWidget):
     def _load_screenshot_file(self, path):
         with open(path, "rb") as f:
             self._screenshot_bytes = f.read()
+        self._set_estimated_insets(self._screenshot_bytes)
+        self._ios_native_cb.setChecked(Path(path).stem.startswith("capture_ios_"))
         try:
             img = Image.open(io.BytesIO(self._screenshot_bytes))
             self._shot_info.setText(f"✓ {Path(path).name}  {img.width}×{img.height}px")
@@ -1415,6 +1953,16 @@ class ScreenshotStudioPanel(QWidget):
             phone_offset_y=self._phone_offset_slider.value(),
             canvas_w=self._resolution_combo.currentData()[0],
             canvas_h=self._resolution_combo.currentData()[1],
+            bg_style=self._bg_style_combo.currentText(),
+            ground_at=self._ground_at.value() / 100,
+            noise=self._noise_cb.isChecked(),
+            text_shadow=self._text_shadow_cb.isChecked(),
+            font_family=self._font_combo.currentText(),
+            title_weight=self._title_weight.value(),
+            subtitle_weight=self._sub_weight.value(),
+            tracking=self._tracking.value(),
+            android_bars=(self._crop_top.value(), self._crop_bottom.value()),
+            ios_native=self._ios_native_cb.isChecked(),
         )
 
     def _update_preview(self):
@@ -1425,9 +1973,9 @@ class ScreenshotStudioPanel(QWidget):
             # Scale to fit preview area
             avail_w = self._preview_label.width() - 20
             avail_h = self._preview_label.height() - 20
-            scale = min(avail_w / CANVAS_W, avail_h / CANVAS_H)
-            pw = int(CANVAS_W * scale)
-            ph = int(CANVAS_H * scale)
+            scale = min(avail_w / pil_img.width, avail_h / pil_img.height)
+            pw = int(pil_img.width * scale)
+            ph = int(pil_img.height * scale)
             thumb = pil_img.resize((pw, ph), Image.LANCZOS)
 
             # Convert to QPixmap
@@ -1444,8 +1992,9 @@ class ScreenshotStudioPanel(QWidget):
         if self._preview_pil is None:
             self._update_preview()
 
+        is_ios = DEVICE_FRAMES[self._frame_combo.currentText()].get("platform") == "ios"
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export PNG", "play_store_screenshot.png",
+            self, "Export PNG", "app_store_screenshot.png" if is_ios else "play_store_screenshot.png",
             "PNG Image (*.png)"
         )
         if not path:
@@ -1454,6 +2003,7 @@ class ScreenshotStudioPanel(QWidget):
         self._progress.setVisible(True)
         self._export_btn.setEnabled(False)
         self._log("Exporting full-resolution PNG...")
+        w, h = self._resolution_combo.currentData()
 
         def _do_export():
             try:
@@ -1469,7 +2019,7 @@ class ScreenshotStudioPanel(QWidget):
                 self._log(f"✓ Exported: {result}")
                 QTimer.singleShot(0, lambda: QMessageBox.information(
                     self, "Export Complete",
-                    f"Saved to:\n{result}\n\n1080 × 1920 px — Store listing ready ✓"
+                    f"Saved to:\n{result}\n\n{w} × {h} px — Store listing ready ✓"
                 ))
             else:
                 self._log(f"Export failed: {result}")
@@ -1501,6 +2051,7 @@ class ScreenshotStudioPanel(QWidget):
 
 def main():
     from app.window import AppWindow, set_app_icon
+    from app.tools.store_preview_panel import StorePreviewPanel
     from app.tools.copy_prefs_panel import CopyPrefsPanel
     from app.tools.settings_page import SettingsPage
     from app.tools.config_viewer_panel import ConfigViewerPanel
@@ -1510,10 +2061,13 @@ def main():
     set_app_icon(app)
     win = AppWindow()
 
-    panel = ScreenshotStudioPanel()
-    win.register_tool("screenshot_studio", "📸", "Screenshot Studio", panel)
+    # Main view: the plan JSON rendered as a store listing
+    win.register_tool("store_preview", "🛍", "Store Preview", StorePreviewPanel())
 
-    # Copy Preferences — centred in its own tool page
+    # Older tools, kept until the capture feature replaces them
+    win.register_section("Deprecated tools")
+    win.register_tool("screenshot_studio", "📸", "Screenshot Studio", ScreenshotStudioPanel())
+
     cp_page = QWidget()
     cp_layout = QHBoxLayout(cp_page)
     cp_layout.setContentsMargins(0, 0, 0, 0)
@@ -1525,12 +2079,8 @@ def main():
     win.register_tool("copy_prefs", "🔁", "Copy Preferences", cp_page)
     cp_panel.logged.connect(win.log)
 
-    # Config Viewer
-    config_viewer = ConfigViewerPanel()
-    win.register_tool("config_viewer", "🗂", "Config Viewer", config_viewer)
-
-    # Settings — pinned to the bottom of the sidebar
-    win.register_pinned("settings", "⚙", "Settings", SettingsPage())
+    win.register_tool("config_viewer", "🗂", "Config Viewer", ConfigViewerPanel())
+    win.register_tool("settings", "⚙", "Saved Apps", SettingsPage())
 
     win.show()
     sys.exit(app.exec())

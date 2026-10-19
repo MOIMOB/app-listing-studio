@@ -1,4 +1,14 @@
 {
+  "app": {
+    "name": "My App",
+    "developer": "My Company",
+    "icon": "assets/app_icon.png",
+    "rating": 4.8,
+    "downloads": "10K+",
+    "short_description": "Everything you need in one place",
+    "description": "Longer store description shown under the screenshots."
+  },
+  "source_dir": "screenshots",
   "output_dir": "fastlane/metadata/android/en-US/images",
   "defaults": {
     "shadow": true,
@@ -33,6 +43,26 @@
       "phone_size": 120,
       "canvas_w": 2160,
       "canvas_h": 2560
+    },
+    {
+      "name": "iPhone 6.9",
+      "output_dir": "fastlane/screenshots",
+      "fastlane_dir": "en-US",
+      "filename_prefix": "iphone_",
+      "frame": "iPhone 16 Pro Max",
+      "phone_size": 150,
+      "canvas_w": 1320,
+      "canvas_h": 2868
+    },
+    {
+      "name": "iPad 13",
+      "output_dir": "fastlane/screenshots",
+      "fastlane_dir": "en-US",
+      "filename_prefix": "ipad_",
+      "frame": "iPad Pro 13",
+      "phone_size": 120,
+      "canvas_w": 2064,
+      "canvas_h": 2752
     }
   ],
   "screenshots": [
