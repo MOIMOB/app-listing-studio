@@ -39,7 +39,7 @@ class SettingsPage(QWidget):
 
         # Page title
         title = QLabel("Settings")
-        title.setStyleSheet("font-size:24px; font-weight:bold; color:#ececec;")
+        title.setStyleSheet("font-size:24px; font-weight:bold;")
         layout.addWidget(title)
 
         layout.addWidget(self._make_hsep())
@@ -56,14 +56,14 @@ class SettingsPage(QWidget):
 
         # Section heading
         heading = QLabel("Saved Apps")
-        heading.setStyleSheet("font-size:16px; font-weight:bold; color:#e2e2e4;")
+        heading.setStyleSheet("font-size:16px; font-weight:bold;")
         vl.addWidget(heading)
 
         desc = QLabel(
             "Package IDs saved here appear as quick-select options in the "
             "Copy Preferences tool."
         )
-        desc.setStyleSheet("color:#6e6e73; font-size:12px;")
+        desc.setStyleSheet(" font-size:12px;")
         desc.setWordWrap(True)
         vl.addWidget(desc)
 
@@ -88,21 +88,17 @@ class SettingsPage(QWidget):
 
         self._name_input = QLineEdit()
         self._name_input.setPlaceholderText("Display name  (e.g. My Game)")
-        self._name_input.setFixedHeight(34)
 
         self._pkg_input = QLineEdit()
         self._pkg_input.setPlaceholderText("Package ID  (e.g. com.example.mygame)")
-        self._pkg_input.setFixedHeight(34)
         self._pkg_input.setMinimumWidth(240)
 
-        add_btn = QPushButton("+ Add")
-        add_btn.setFixedHeight(34)
-        add_btn.setFixedWidth(72)
-        add_btn.setObjectName("primary")
+        add_btn = QPushButton("Add")
+        add_btn.setDefault(True)
         add_btn.clicked.connect(self._add_app)
 
         self._error_lbl = QLabel("")
-        self._error_lbl.setStyleSheet("color:#e05; font-size:11px;")
+        self._error_lbl.setStyleSheet(" font-size:11px;")
 
         hl.addWidget(self._name_input, 1)
         hl.addWidget(self._pkg_input, 2)
@@ -129,7 +125,7 @@ class SettingsPage(QWidget):
         if not apps:
             empty = QLabel("No apps saved yet. Add one above.")
             empty.setStyleSheet(
-                "color:#4a4a4f; font-size:12px; font-style:italic; padding:12px 0 4px 0;"
+                " font-size:12px; font-style:italic; padding:12px 0 4px 0;"
             )
             self._list_layout.addWidget(empty)
             return
@@ -148,35 +144,30 @@ class SettingsPage(QWidget):
         hl.setContentsMargins(4, 0, 4, 0)
         hl.setSpacing(12)
         name_hdr = QLabel("Name")
-        name_hdr.setStyleSheet("color:#55555a; font-size:11px; font-weight:bold;")
+        name_hdr.setStyleSheet(" font-size:11px; font-weight:bold;")
         pkg_hdr = QLabel("Package ID")
-        pkg_hdr.setStyleSheet("color:#55555a; font-size:11px; font-weight:bold;")
+        pkg_hdr.setStyleSheet(" font-size:11px; font-weight:bold;")
         hl.addWidget(name_hdr, 1)
         hl.addWidget(pkg_hdr, 2)
-        hl.addSpacing(34)   # room for the delete button
+        hl.addSpacing(70)   # room for the Remove button
         return row
 
     def _make_app_row(self, name: str, package: str) -> QWidget:
         row = QWidget()
         row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        row.setStyleSheet(
-            "QWidget { border-radius:6px; padding:2px 0; }"
-            "QWidget:hover { background:#161617; }"
-        )
         hl = QHBoxLayout(row)
         hl.setContentsMargins(4, 6, 4, 6)
         hl.setSpacing(12)
 
         name_lbl = QLabel(name)
-        name_lbl.setStyleSheet("color:#d0d0d4; font-size:13px;")
+        name_lbl.setStyleSheet(" font-size:13px;")
 
         pkg_lbl = QLabel(package)
-        pkg_lbl.setStyleSheet("color:#5e9cff; font-size:12px;")
+        pkg_lbl.setStyleSheet(" font-size:12px;")
         pkg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
-        del_btn = QPushButton("✕")
-        del_btn.setFixedSize(26, 26)
-        del_btn.setObjectName("danger")
+        del_btn = QPushButton("Remove")
+        del_btn.setFlat(True)
         del_btn.setToolTip(f"Remove {name}")
         del_btn.clicked.connect(lambda _, p=package: self._remove_app(p))
 
@@ -220,6 +211,5 @@ class SettingsPage(QWidget):
     def _make_hsep(self) -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet("color:#262629;")
         f.setFixedHeight(1)
         return f

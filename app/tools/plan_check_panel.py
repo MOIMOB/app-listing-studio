@@ -14,11 +14,12 @@ import io
 import os
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QListWidget,
-    QListWidgetItem, QScrollArea, QFrame, QFileDialog, QCheckBox, QSizePolicy,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QComboBox,
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QScrollArea, QFrame, QFileDialog, QCheckBox,
+    QSizePolicy, QStyle,
 )
-from PyQt6.QtCore import Qt, QThread, QTimer, QFileSystemWatcher, QSize, QUrl, pyqtSignal
-from PyQt6.QtGui import QPixmap, QCursor, QDesktopServices
+from PyQt6.QtCore import Qt, QThread, QTimer, QFileSystemWatcher, QUrl, pyqtSignal
+from PyQt6.QtGui import QPixmap, QCursor, QDesktopServices, QColor
 
 from PIL import Image, ImageDraw
 
@@ -33,7 +34,9 @@ from main import DEVICE_FRAMES, compose_image
 _RENDER_W = 540
 _THUMB_H = 300
 _STORES = (("android", "Google Play"), ("ios", "App Store"))
-_LEVEL_COLOR = {ERROR: theme.ERROR, WARN: theme.WARN}
+_LEVEL_ICON = {ERROR: QStyle.StandardPixmap.SP_MessageBoxCritical,
+               WARN: QStyle.StandardPixmap.SP_MessageBoxWarning}
+_PATH = Qt.ItemDataRole.UserRole
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -185,18 +188,17 @@ class _Thumb(QFrame):
         self.img = QLabel()
         self.img.setFixedSize(w, _THUMB_H)
         self.img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.img.setStyleSheet(f"background:{theme.SURFACE}; border-radius:6px; color:{theme.TEXT_3};")
+        self.img.setFrameShape(QFrame.Shape.StyledPanel)
+        theme.muted(self.img)
         lay.addWidget(self.img)
 
-        cap = QLabel(f"{idx + 1}  {caption}")
+        cap = theme.small(QLabel(f"{idx + 1}  {caption}"))
         cap.setFixedWidth(w)
-        cap.setStyleSheet(f"color:{theme.TEXT_2}; font-size:12px;")
         cap.setToolTip(caption)
         lay.addWidget(cap)
 
-        text, color = _count_text(issues)
-        mark = QLabel(text if issues else "")
-        mark.setStyleSheet(f"color:{color}; font-size:11px;")
+        text, level = _count_text(issues)
+        mark = theme.small(theme.status(QLabel(text if issues else ""), level))
         mark.setToolTip("\n".join(i.message for i in issues))
         lay.addWidget(mark)
 
@@ -207,16 +209,15 @@ class _Thumb(QFrame):
 
 def _issue_row(level, text):
     row = QHBoxLayout()
-    row.setSpacing(8)
-    dot = QLabel("●")
-    dot.setStyleSheet(f"color:{_LEVEL_COLOR[level]}; font-size:9px;")
-    dot.setFixedWidth(10)
-    dot.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-    row.addWidget(dot)
+    row.setSpacing(6)
+    icon = QLabel()
+    icon.setPixmap(icon.style().standardIcon(_LEVEL_ICON[level]).pixmap(14, 14))
+    icon.setFixedWidth(16)
+    icon.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+    row.addWidget(icon)
     msg = QLabel(text)
     msg.setWordWrap(True)
     msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-    msg.setStyleSheet(f"color:{theme.TEXT_2}; font-size:12px;")
     row.addWidget(msg, 1)
     return row
 
@@ -276,12 +277,21 @@ class PlanCheckPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         root.addWidget(self._build_list_column())
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        root.addWidget(sep)
 
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
         rl.setSpacing(0)
         rl.addWidget(self._build_header())
+        self._header_sep = QFrame()
+        self._header_sep.setFrameShape(QFrame.Shape.HLine)
+        self._header_sep.setFrameShadow(QFrame.Shadow.Sunken)
+        self._header_sep.setVisible(False)
+        rl.addWidget(self._header_sep)
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -291,115 +301,122 @@ class PlanCheckPanel(QWidget):
 
     def _build_list_column(self):
         col = QWidget()
-        col.setObjectName("planColumn")
-        col.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        col.setFixedWidth(280)
-        col.setStyleSheet(f"QWidget#planColumn {{ background:{theme.BG}; border-right:1px solid {theme.BORDER}; }}")
+        col.setFixedWidth(300)
         lay = QVBoxLayout(col)
-        lay.setContentsMargins(12, 16, 12, 12)
+        lay.setContentsMargins(12, 12, 12, 12)
         lay.setSpacing(6)
 
         head = QHBoxLayout()
-        title = QLabel("Configs")
-        title.setStyleSheet(f"color:{theme.TEXT}; font-size:14px; font-weight:600;")
-        head.addWidget(title, 1)
+        head.addWidget(theme.heading(QLabel("Configs"), 1), 1)
         rescan = QPushButton("Rescan")
-        rescan.setObjectName("chip")
         rescan.clicked.connect(self._scan)
         head.addWidget(rescan)
         lay.addLayout(head)
 
         root_row = QHBoxLayout()
-        self._root_lbl = QLabel()
-        self._root_lbl.setStyleSheet(f"color:{theme.TEXT_3}; font-size:12px;")
+        self._root_lbl = theme.small(theme.muted(QLabel()))
         root_row.addWidget(self._root_lbl, 1)
         change = QPushButton("Change…")
-        change.setFlat(True)
-        change.setStyleSheet(f"QPushButton {{ color:{theme.ACCENT}; border:none; background:transparent;"
-                             f" padding:0; font-size:12px; }}")
-        change.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         change.clicked.connect(self._change_root)
         root_row.addWidget(change)
         lay.addLayout(root_row)
-        lay.addSpacing(6)
 
-        self._list = QListWidget()
-        self._list.setStyleSheet(f"""
-            QListWidget {{ background:transparent; border:none; outline:none; }}
-            QListWidget::item {{ border-radius:5px; }}
-            QListWidget::item:hover {{ background:{theme.SURFACE}; }}
-            QListWidget::item:selected {{ background:{theme.SURFACE_2}; }}
-        """)
+        self._list = QTreeWidget()
+        self._list.setColumnCount(2)
+        self._list.setHeaderLabels(["Plan", "Issues"])
+        self._list.setRootIsDecorated(False)
+        self._list.setUniformRowHeights(True)
+        self._list.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        hdr = self._list.header()
+        hdr.setStretchLastSection(False)
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._list.currentItemChanged.connect(self._on_item)
         lay.addWidget(self._list, 1)
         return col
 
     def _build_header(self):
         bar = QWidget()
-        bar.setObjectName("checkHeader")
-        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        bar.setStyleSheet(f"QWidget#checkHeader {{ border-bottom:1px solid {theme.BORDER}; }}")
         lay = QVBoxLayout(bar)
-        lay.setContentsMargins(24, 16, 24, 14)
+        lay.setContentsMargins(20, 14, 20, 12)
         lay.setSpacing(10)
 
         top = QHBoxLayout()
         names = QVBoxLayout()
         names.setSpacing(2)
-        self._title = QLabel("")
-        self._title.setStyleSheet(f"color:{theme.TEXT}; font-size:18px; font-weight:600;")
+        self._title = theme.heading(QLabel(""), 4)
         names.addWidget(self._title)
-        self._subtitle = QLabel("")
-        self._subtitle.setStyleSheet(f"color:{theme.TEXT_3}; font-size:12px;")
+        self._subtitle = theme.small(theme.muted(QLabel("")))
         self._subtitle.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         names.addWidget(self._subtitle)
         top.addLayout(names, 1)
         self._summary = QLabel("")
-        self._summary.setStyleSheet("font-size:13px;")
         top.addWidget(self._summary)
-        self._open_btn = QPushButton("Open in editor")
+        top.addSpacing(8)
+        self._open_btn = QPushButton("Open in Editor")
         self._open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._path)))
         top.addWidget(self._open_btn)
         lay.addLayout(top)
 
-        controls = QHBoxLayout()
-        controls.setSpacing(6)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+        grid.setColumnStretch(1, 1)
+
+        def row_label(text):
+            lbl = QLabel(text)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            return lbl
+
+        def hrow():
+            r = QHBoxLayout()
+            r.setSpacing(14)
+            return r
+
+        stores = hrow()
         self._store_btns = {}
         for key, label in _STORES:
-            b = QPushButton(label)
-            b.setObjectName("chip")
-            b.setCheckable(True)
+            b = QCheckBox(label)
             b.setChecked(True)
             b.toggled.connect(lambda on, k=key: self._toggle_store(k, on))
             self._store_btns[key] = b
-            controls.addWidget(b)
-        controls.addSpacing(10)
+            stores.addWidget(b)
+        stores.addSpacing(16)
+        self._locale_lbl = QLabel("Locale:")
+        stores.addWidget(self._locale_lbl)
         self._locale_combo = QComboBox()
-        self._locale_combo.setToolTip("Locale")
         self._locale_combo.currentTextChanged.connect(self._set_locale)
-        controls.addWidget(self._locale_combo)
-        controls.addSpacing(10)
+        stores.addWidget(self._locale_combo)
+        stores.addStretch()
+        grid.addWidget(row_label("Stores:"), 0, 0)
+        grid.addLayout(stores, 0, 1)
+
+        self._device_row = hrow()
+        grid.addWidget(row_label("Devices:"), 1, 0)
+        grid.addLayout(self._device_row, 1, 1)
+
+        self._other_lbl = row_label("Not in plan:")
+        self._other_row = hrow()
+        grid.addWidget(self._other_lbl, 2, 0)
+        grid.addLayout(self._other_row, 2, 1)
+
+        show = hrow()
         self._others_cb = QCheckBox("Frames not in plan")
         self._others_cb.setToolTip("Also try the plan's style on every other device frame")
         self._others_cb.toggled.connect(lambda _on: self._refresh())
-        controls.addWidget(self._others_cb)
-        self._guides_cb = QCheckBox("Guides")
+        show.addWidget(self._others_cb)
+        self._guides_cb = QCheckBox("Layout guides")
         self._guides_cb.setToolTip("Outline the text areas and the top of the device (red when they overlap)")
         self._guides_cb.toggled.connect(lambda _on: self._rerender())
-        controls.addWidget(self._guides_cb)
-        self._captures_cb = QCheckBox("Use captures")
+        show.addWidget(self._guides_cb)
+        self._captures_cb = QCheckBox("Real captures")
         self._captures_cb.setToolTip("Use the raw screenshots where they exist instead of the wireframe")
         self._captures_cb.toggled.connect(lambda _on: self._refresh())
-        controls.addWidget(self._captures_cb)
-        controls.addStretch()
-        lay.addLayout(controls)
-
-        self._device_row = QHBoxLayout()
-        self._device_row.setSpacing(6)
-        lay.addLayout(self._device_row)
-        self._other_row = QHBoxLayout()
-        self._other_row.setSpacing(6)
-        lay.addLayout(self._other_row)
+        show.addWidget(self._captures_cb)
+        show.addStretch()
+        grid.addWidget(row_label("Show:"), 3, 0)
+        grid.addLayout(show, 3, 1)
+        lay.addLayout(grid)
 
         self._header = bar
         bar.setVisible(False)
@@ -409,8 +426,7 @@ class PlanCheckPanel(QWidget):
         lbl = QLabel(text)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setWordWrap(True)
-        lbl.setStyleSheet(f"color:{theme.TEXT_3}; font-size:13px;")
-        return lbl
+        return theme.muted(lbl)
 
     def _set_body(self, widget):
         old = self._scroll.takeWidget()
@@ -442,18 +458,18 @@ class PlanCheckPanel(QWidget):
         select_item = first_item = None
         for repo, paths in by_repo.items():
             if repo:
-                head = QListWidgetItem()
+                head = QTreeWidgetItem([repo])
                 head.setFlags(Qt.ItemFlag.NoItemFlags)
-                head.setSizeHint(QSize(0, 30))
-                self._list.addItem(head)
-                self._list.setItemWidget(head, self._repo_label(repo))
+                head.setFont(0, theme.heading(QLabel(), 0).font())
+                head.setForeground(0, self._list.palette().text())
+                self._list.addTopLevelItem(head)
             for p in paths:
-                item = QListWidgetItem()
-                item.setData(Qt.ItemDataRole.UserRole, p)
-                item.setSizeHint(QSize(0, 44))
-                self._list.addItem(item)
                 rel = os.path.relpath(p, os.path.join(self._root, repo))
-                self._list.setItemWidget(item, self._plan_row(rel, self._summarize(p)))
+                item = QTreeWidgetItem(["   " + rel if repo else rel])
+                item.setData(0, _PATH, p)
+                item.setToolTip(0, p)
+                self._set_status(item, *self._summarize(p))
+                self._list.addTopLevelItem(item)
                 first_item = first_item or item
                 if p == select:
                     select_item = item
@@ -469,26 +485,14 @@ class PlanCheckPanel(QWidget):
                 "A plan is a JSON file with a \"screenshots\" list plus \"devices\" or \"defaults\" "
                 "(see example_plan.json). Use Change… to scan another folder."))
 
-    def _repo_label(self, repo):
-        lbl = QLabel(repo)
-        lbl.setStyleSheet(f"color:{theme.TEXT_3}; font-size:12px; font-weight:600; padding:8px 8px 0 8px;")
-        return lbl
-
-    def _plan_row(self, rel, status):
-        w = QWidget()
-        w.setStyleSheet("background:transparent;")
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(10, 4, 8, 4)
-        lay.setSpacing(1)
-        name = QLabel(rel)
-        name.setStyleSheet(f"color:{theme.TEXT}; font-size:13px;")
-        lay.addWidget(name)
-        text, color = status
-        st = QLabel(text)
-        st.setObjectName("status")
-        st.setStyleSheet(f"color:{color}; font-size:11px;")
-        lay.addWidget(st)
-        return w
+    @staticmethod
+    def _set_status(item, text, level):
+        short = {"No issues": "OK"}.get(text, text.replace(" errors", " err").replace(" error", " err")
+                                         .replace(" warnings", " warn").replace(" warning", " warn"))
+        item.setText(1, short if not text.startswith("Can't read") else "Invalid")
+        item.setToolTip(1, text)
+        item.setForeground(1, QColor(theme.level_color(level)) if level != theme.OK
+                           else item.foreground(0))
 
     def _summarize(self, path):
         try:
@@ -499,13 +503,9 @@ class PlanCheckPanel(QWidget):
 
     def _update_list_status(self):
         item = self._list.currentItem()
-        w = self._list.itemWidget(item) if item else None
-        if not w:
-            return
-        st = w.findChild(QLabel, "status")
-        text, color = (f"Can't read: {self._error}"[:60], theme.ERROR) if self._error else _count_text(self._issues)
-        st.setText(text)
-        st.setStyleSheet(f"color:{color}; font-size:11px;")
+        if item:
+            self._set_status(item, *((f"Can't read: {self._error}", theme.ERROR) if self._error
+                                     else _count_text(self._issues)))
 
     # ── Plan ──────────────────────────────────────────────────────────────────
 
@@ -531,7 +531,7 @@ class PlanCheckPanel(QWidget):
         return out
 
     def _on_item(self, item, _prev=None):
-        path = item.data(Qt.ItemDataRole.UserRole) if item else None
+        path = item.data(0, _PATH) if item else None
         if not path:
             return
         self._path = path
@@ -563,13 +563,16 @@ class PlanCheckPanel(QWidget):
         self._title.setText(rel.split(os.sep)[0] if os.sep in rel else os.path.basename(self._path))
         self._subtitle.setText(self._path.replace(home, "~", 1))
         self._header.setVisible(True)
+        self._header_sep.setVisible(True)
 
         self._locale_combo.blockSignals(True)
         self._locale_combo.clear()
         if self._plan:
             self._locale_combo.addItems(list(self._plan.locales))
             self._locale_combo.setCurrentText(self._plan.locale)
-        self._locale_combo.setVisible(bool(self._plan and len(self._plan.locales) > 1))
+        many = bool(self._plan and len(self._plan.locales) > 1)
+        self._locale_combo.setVisible(many)
+        self._locale_lbl.setVisible(many)
         self._locale_combo.blockSignals(False)
         self._refresh()
 
@@ -595,7 +598,7 @@ class PlanCheckPanel(QWidget):
             return
         if self._error:
             self._summary.setText("Invalid JSON — showing the last good version")
-            self._summary.setStyleSheet(f"color:{theme.ERROR}; font-size:13px;")
+            theme.status(self._summary, theme.ERROR)
             self._summary.setToolTip(self._error)
             return
 
@@ -609,10 +612,10 @@ class PlanCheckPanel(QWidget):
         self._devices = [d for d in in_store if d[0] not in self._hidden_devices]
 
         self._issues = check_plan(plan, self._devices)
-        text, color = _count_text(self._issues)
+        text, level = _count_text(self._issues)
         n_images = len(self._devices) * len(plan.screenshots)
         self._summary.setText(f"{n_images} images  ·  {text}")
-        self._summary.setStyleSheet(f"color:{color}; font-size:13px;")
+        theme.status(self._summary, level)
         self._summary.setToolTip("")
         self._update_list_status()
 
@@ -646,14 +649,10 @@ class PlanCheckPanel(QWidget):
                 w = row.takeAt(0).widget()
                 if w:
                     w.deleteLater()
-        if any(not in_plan for *_x, in_plan in devices):
-            lbl = QLabel("Not in plan")
-            lbl.setStyleSheet(f"color:{theme.TEXT_3}; font-size:12px; padding-right:4px;")
-            self._other_row.addWidget(lbl)
+        others = any(not in_plan for *_x, in_plan in devices)
+        self._other_lbl.setVisible(others)
         for name, _platform, _device, in_plan in devices:
-            b = QPushButton(name)
-            b.setObjectName("chip")
-            b.setCheckable(True)
+            b = QCheckBox(name)
             b.setChecked(name not in self._hidden_devices)
             b.toggled.connect(lambda on, n=name: self._toggle_device(n, on))
             (self._device_row if in_plan else self._other_row).addWidget(b)
@@ -671,9 +670,7 @@ class PlanCheckPanel(QWidget):
         if plan_issues:
             box = QVBoxLayout()
             box.setSpacing(6)
-            head = QLabel("Plan")
-            head.setStyleSheet(f"color:{theme.TEXT}; font-size:14px; font-weight:600;")
-            box.addWidget(head)
+            box.addWidget(theme.heading(QLabel("Plan"), 1))
             for level, text in _grouped(plan_issues):
                 box.addLayout(_issue_row(level, text))
             lay.addLayout(box)
@@ -684,8 +681,7 @@ class PlanCheckPanel(QWidget):
                 note = QLabel(f"This plan has no {label} devices. Tick “Frames not in plan” to see how its "
                               f"style works on {label} frames.")
                 note.setWordWrap(True)
-                note.setStyleSheet(f"color:{theme.TEXT_3}; font-size:12px;")
-                lay.addWidget(note)
+                lay.addWidget(theme.muted(note))
         if not self._devices:
             lay.addWidget(self._message("No devices for the selected stores."))
         for name, platform, device, in_plan in self._devices:
@@ -702,23 +698,18 @@ class PlanCheckPanel(QWidget):
         issues = [i for i in self._issues if i.device == name]
         kw0 = self._kwargs.get((name, 0))
         head = QHBoxLayout()
-        title = QLabel(name)
-        title.setStyleSheet(f"color:{theme.TEXT}; font-size:14px; font-weight:600;")
-        head.addWidget(title)
+        head.addWidget(theme.heading(QLabel(name), 1))
+        head.addSpacing(6)
         store = dict(_STORES)[platform]
         meta = [store]
         if kw0:
             meta += [kw0["frame_name"], f"{kw0['canvas_w']}×{kw0['canvas_h']}"]
         if not in_plan:
             meta.append("not in plan — sized like the closest plan device")
-        m = QLabel("  ·  ".join(meta))
-        m.setStyleSheet(f"color:{theme.TEXT_3}; font-size:12px;")
-        head.addWidget(m)
+        head.addWidget(theme.muted(QLabel("  ·  ".join(meta))))
         head.addStretch()
-        text, color = _count_text(issues)
-        st = QLabel(text)
-        st.setStyleSheet(f"color:{color}; font-size:12px;")
-        head.addWidget(st)
+        text, level = _count_text(issues)
+        head.addWidget(theme.status(QLabel(text), level))
         sl.addLayout(head)
 
         strip = QWidget()
@@ -776,7 +767,7 @@ class PlanCheckPanel(QWidget):
             return
         if img is None:
             th.img.setText("Render failed")
-            th.img.setStyleSheet(f"background:{theme.SURFACE}; border-radius:6px; color:{theme.ERROR};")
+            theme.status(th.img, theme.ERROR)
         else:
             th.img.setText("")
             th.img.setPixmap(_pixmap(img, _THUMB_H))

@@ -1,164 +1,93 @@
 """
-Sidebar navigation: a plain text list in three zones.
+Sidebar navigation: a native source list.
 
   • add_tool(id, label)               — main tools, top of the list
   • add_tool(id, label, group="...")  — tools inside a collapsible group
                                         (e.g. "Legacy tools"), below the main tools
-  • add_pinned(id, label)             — fixed bottom strip (Settings)
+  • add_pinned(id, label)             — tools listed last (Settings)
 
 The first main tool added is selected automatically.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QFrame
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QFrame, QAbstractItemView
+from PyQt6.QtCore import pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QPalette
 
-from app import theme
+SIDEBAR_WIDTH = 200
+_ID = Qt.ItemDataRole.UserRole
 
-SIDEBAR_WIDTH = 208
 
-
-class SidebarWidget(QWidget):
+class SidebarWidget(QTreeWidget):
     tool_selected = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._items: dict[str, QPushButton] = {}
-        self._groups: dict[str, tuple[QPushButton, QWidget, QVBoxLayout]] = {}
-        self._active: str | None = None
+        self._groups: dict[str, QTreeWidgetItem] = {}
+        self._pinned: list[QTreeWidgetItem] = []
+        self._selected_once = False
 
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setHeaderHidden(True)
         self.setFixedWidth(SIDEBAR_WIDTH)
-        self._build()
-        self._apply_style()
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setIndentation(14)
+        self.setRootIsDecorated(True)
+        self.setUniformRowHeights(True)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        # Sit on the window background like a macOS source list
+        pal = self.palette()
+        pal.setColor(QPalette.ColorRole.Base, pal.color(QPalette.ColorRole.Window))
+        self.setPalette(pal)
 
-    # ── Construction ──────────────────────────────────────────────────────────
-
-    def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 14, 10, 10)
-        layout.setSpacing(0)
-
-        title = QLabel("App Listing Studio")
-        title.setObjectName("sidebarTitle")
-        layout.addWidget(title)
-        layout.addSpacing(14)
-
-        self._tool_layout = QVBoxLayout()
-        self._tool_layout.setSpacing(1)
-        layout.addLayout(self._tool_layout)
-
-        self._group_layout = QVBoxLayout()
-        self._group_layout.setSpacing(1)
-        layout.addLayout(self._group_layout)
-
-        layout.addStretch(1)
-
-        sep = QFrame()
-        sep.setObjectName("sidebarSep")
-        sep.setFixedHeight(1)
-        layout.addWidget(sep)
-        layout.addSpacing(6)
-
-        self._pinned_layout = QVBoxLayout()
-        self._pinned_layout.setSpacing(1)
-        layout.addLayout(self._pinned_layout)
+        self.currentItemChanged.connect(self._on_current)
+        self.itemClicked.connect(self._on_clicked)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def add_tool(self, tool_id: str, label: str, group: str | None = None):
-        btn = self._make_btn(tool_id, label)
+        item = self._item(tool_id, label)
         if group is None:
-            self._tool_layout.addWidget(btn)
-            if self._active is None:
-                self._select(tool_id)
+            # Main tools go above any group / pinned items
+            first_group = min((self.indexOfTopLevelItem(g) for g in [*self._groups.values(), *self._pinned]),
+                              default=self.topLevelItemCount())
+            self.insertTopLevelItem(first_group, item)
+            if not self._selected_once:
+                self._selected_once = True
+                self.setCurrentItem(item)
         else:
-            _, _, body_layout = self._group(group)
-            btn.setProperty("nested", True)
-            body_layout.addWidget(btn)
-        self._items[tool_id] = btn
+            self._group(group).addChild(item)
 
     def add_pinned(self, tool_id: str, label: str):
-        btn = self._make_btn(tool_id, label)
-        self._pinned_layout.addWidget(btn)
-        self._items[tool_id] = btn
+        item = self._item(tool_id, label)
+        self.addTopLevelItem(item)
+        self._pinned.append(item)
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _group(self, name: str):
-        if name in self._groups:
-            return self._groups[name]
+    @staticmethod
+    def _item(tool_id, label):
+        item = QTreeWidgetItem([label])
+        item.setData(0, _ID, tool_id)
+        item.setSizeHint(0, QSize(0, 26))
+        return item
 
-        header = QPushButton()
-        header.setObjectName("groupHeader")
-        header.setCheckable(True)
-        header.setChecked(False)
-        header.setFixedHeight(30)
-
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(1)
-        body.setVisible(False)
-
-        def _toggle(open_: bool):
-            body.setVisible(open_)
-            header.setText(f"{'▾' if open_ else '▸'}  {name}")
-
-        header.toggled.connect(_toggle)
-        _toggle(False)
-
-        if self._group_layout.count() == 0:
-            self._group_layout.addSpacing(14)
-        self._group_layout.addWidget(header)
-        self._group_layout.addWidget(body)
-        self._groups[name] = (header, body, body_layout)
+    def _group(self, name: str) -> QTreeWidgetItem:
+        if name not in self._groups:
+            g = QTreeWidgetItem([name])
+            g.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            g.setSizeHint(0, QSize(0, 26))
+            g.setForeground(0, self.palette().brush(QPalette.ColorRole.PlaceholderText))
+            pos = min((self.indexOfTopLevelItem(p) for p in self._pinned), default=self.topLevelItemCount())
+            self.insertTopLevelItem(pos, g)
+            self._groups[name] = g
         return self._groups[name]
 
-    def _make_btn(self, tool_id: str, label: str) -> QPushButton:
-        btn = QPushButton(label)
-        btn.setCheckable(True)
-        btn.setObjectName("toolBtn")
-        btn.setFixedHeight(30)
-        btn.clicked.connect(lambda _checked, tid=tool_id: self._select(tid))
-        return btn
+    def _on_clicked(self, item, _col):
+        if item in self._groups.values():
+            item.setExpanded(not item.isExpanded())
 
-    def _select(self, tool_id: str):
-        for tid, btn in self._items.items():
-            btn.setChecked(tid == tool_id)
-        self._active = tool_id
-        self.tool_selected.emit(tool_id)
-
-    def _apply_style(self):
-        self.setStyleSheet(f"""
-            SidebarWidget {{
-                background: {theme.BG_SUNKEN};
-                border-right: 1px solid {theme.BORDER};
-            }}
-            QLabel#sidebarTitle {{
-                color: {theme.TEXT};
-                font-size: 13px;
-                font-weight: 600;
-                padding-left: 8px;
-            }}
-            QFrame#sidebarSep {{ background: {theme.BORDER}; border: none; }}
-            QPushButton#toolBtn, QPushButton#groupHeader {{
-                background: transparent;
-                color: {theme.TEXT_2};
-                border: none;
-                border-radius: 5px;
-                text-align: left;
-                padding: 0 8px;
-                font-size: 13px;
-            }}
-            QPushButton#toolBtn[nested="true"] {{ padding-left: 22px; }}
-            QPushButton#toolBtn:hover, QPushButton#groupHeader:hover {{
-                background: {theme.SURFACE};
-                color: {theme.TEXT};
-            }}
-            QPushButton#toolBtn:checked {{
-                background: {theme.SURFACE_2};
-                color: {theme.TEXT};
-            }}
-            QPushButton#groupHeader {{ color: {theme.TEXT_3}; font-size: 12px; }}
-            QPushButton#groupHeader:checked {{ background: transparent; }}
-        """)
+    def _on_current(self, item, _prev):
+        tool_id = item.data(0, _ID) if item else None
+        if tool_id:
+            self.tool_selected.emit(tool_id)

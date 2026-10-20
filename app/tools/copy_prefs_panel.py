@@ -69,10 +69,10 @@ class CopyPrefsPanel(QWidget):
             root.addLayout(scan_row)
 
             self._scan_status = QLabel("Click Scan to detect ADB devices.")
-            self._scan_status.setStyleSheet("color:#6e6e73; font-size:11px;")
+            self._scan_status.setStyleSheet(" font-size:11px;")
             root.addWidget(self._scan_status)
 
-        grp = QGroupBox("COPY SHARED PREFERENCES" if not self._compact else "")
+        grp = QGroupBox("Copy Shared Preferences" if not self._compact else "")
         grp.setFlat(self._compact)
         form = QVBoxLayout(grp)
         form.setSpacing(10)
@@ -82,7 +82,7 @@ class CopyPrefsPanel(QWidget):
         pkg_row.setSpacing(4)
         pkg_lbl = QLabel("Package:")
         pkg_lbl.setFixedWidth(80)
-        pkg_lbl.setStyleSheet("color:#8e8e93; font-size:12px;")
+        pkg_lbl.setStyleSheet(" font-size:12px;")
 
         self._pkg_combo = QComboBox()
         self._pkg_combo.setEditable(True)
@@ -98,7 +98,7 @@ class CopyPrefsPanel(QWidget):
         from_row = QHBoxLayout()
         from_lbl = QLabel("From:")
         from_lbl.setFixedWidth(80)
-        from_lbl.setStyleSheet("color:#8e8e93; font-size:12px;")
+        from_lbl.setStyleSheet(" font-size:12px;")
         self._from_combo = QComboBox()
         from_row.addWidget(from_lbl)
         from_row.addWidget(self._from_combo, 1)
@@ -107,7 +107,7 @@ class CopyPrefsPanel(QWidget):
         to_row = QHBoxLayout()
         to_lbl = QLabel("To:")
         to_lbl.setFixedWidth(80)
-        to_lbl.setStyleSheet("color:#8e8e93; font-size:12px;")
+        to_lbl.setStyleSheet(" font-size:12px;")
         self._to_combo = QComboBox()
         to_row.addWidget(to_lbl)
         to_row.addWidget(self._to_combo, 1)
@@ -115,12 +115,12 @@ class CopyPrefsPanel(QWidget):
 
         # ── Copy button ───────────────────────────────────────────────────────
         self._copy_btn = QPushButton("Copy Preferences")
-        self._copy_btn.setObjectName("primary")
+        self._copy_btn.setDefault(True)
         self._copy_btn.clicked.connect(self._do_copy)
         form.addWidget(self._copy_btn)
 
         note = QLabel("Requires a debuggable build or rooted device.")
-        note.setStyleSheet("color:#6e6e73; font-size:10px; font-style:italic;")
+        note.setStyleSheet(" font-size:10px; font-style:italic;")
         form.addWidget(note)
 
         root.addWidget(grp)
@@ -133,7 +133,7 @@ class CopyPrefsPanel(QWidget):
         root.addWidget(self._progress)
 
         self._status_lbl = QLabel("")
-        self._status_lbl.setStyleSheet("color:#9a9aa0; font-size:11px;")
+        self._status_lbl.setStyleSheet(" font-size:11px;")
         self._status_lbl.setWordWrap(True)
         root.addWidget(self._status_lbl)
 
@@ -141,20 +141,19 @@ class CopyPrefsPanel(QWidget):
 
     def _build_header(self, root: QVBoxLayout):
         title = QLabel("Copy Preferences")
-        title.setStyleSheet("font-size:22px; font-weight:bold; color:#ececec;")
+        title.setStyleSheet("font-size:22px; font-weight:bold;")
         root.addWidget(title)
 
         desc = QLabel(
             "Transfer an app's SharedPreferences from one ADB device to another.\n"
             "Useful for seeding emulator state from a physical device."
         )
-        desc.setStyleSheet("color:#7a7a80; font-size:13px;")
+        desc.setStyleSheet(" font-size:13px;")
         desc.setWordWrap(True)
         root.addWidget(desc)
 
         sep = QWidget()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background:#262629;")
         root.addWidget(sep)
 
     # ── App list helpers ──────────────────────────────────────────────────────

@@ -852,10 +852,9 @@ class ColorButton(QPushButton):
         self.setStyleSheet(f"""
             QPushButton {{
                 background: {self._color};
-                border: 2px solid #444;
-                border-radius: 6px;
+                border: 1px solid palette(mid);
+                border-radius: 5px;
             }}
-            QPushButton:hover {{ border-color: #888; }}
         """)
 
     def _pick(self):
@@ -922,7 +921,6 @@ class ScreenshotStudioPanel(QWidget):
 
         # Right: preview
         right = QWidget()
-        right.setStyleSheet("background: #111112;")
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         splitter.addWidget(right)
@@ -938,7 +936,6 @@ class ScreenshotStudioPanel(QWidget):
         # Preview label
         self._preview_label = QLabel("Preview")
         self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_label.setStyleSheet("background: #111112; color: #444;")
         self._preview_label.setMinimumWidth(300)
 
         self._progress = QProgressBar()
@@ -951,7 +948,7 @@ class ScreenshotStudioPanel(QWidget):
         right_layout.addWidget(self._preview_label, 1)
 
         self._log_label = QLabel("Ready.")
-        self._log_label.setStyleSheet("color: #6e6e73; font-size: 11px; padding: 4px 12px;")
+        self._log_label.setStyleSheet(" font-size: 11px; padding: 4px 12px;")
         right_layout.addWidget(self._log_label)
 
         # Expandable log panel
@@ -959,18 +956,13 @@ class ScreenshotStudioPanel(QWidget):
         self._log_panel.setReadOnly(True)
         self._log_panel.setFixedHeight(120)
         self._log_panel.setStyleSheet(
-            "background:#111112; color:#9a9aa0; font-family:Consolas,Menlo,monospace;"
-            "font-size:11px; border:none; border-top:1px solid #2a2a2d; padding:4px 8px;"
+            "font-family:Menlo,Consolas,monospace; font-size:11px;"
         )
         self._log_panel.setVisible(False)
         right_layout.addWidget(self._log_panel)
 
         log_toggle = QPushButton("▼ Show Log")
-        log_toggle.setFixedHeight(20)
-        log_toggle.setStyleSheet(
-            "QPushButton{background:#111112; color:#55555a; border:none; border-top:1px solid #2a2a2d;"
-            "font-size:10px;} QPushButton:hover{color:#7a7a80;}"
-        )
+        log_toggle.setFlat(True)
         def _toggle_log():
             visible = not self._log_panel.isVisible()
             self._log_panel.setVisible(visible)
@@ -990,7 +982,7 @@ class ScreenshotStudioPanel(QWidget):
         if label_text:
             lbl = QLabel(label_text)
             lbl.setFixedWidth(110)
-            lbl.setStyleSheet("color:#8e8e93; font-size:12px;")
+            lbl.setStyleSheet(" font-size:12px;")
             row.addWidget(lbl)
         row.addWidget(widget)
         layout.addLayout(row)
@@ -1015,7 +1007,7 @@ class ScreenshotStudioPanel(QWidget):
 
         # Device info badge row
         self._device_info_label = QLabel("")
-        self._device_info_label.setStyleSheet("color:#6e6e73; font-size:11px; padding:2px 0;")
+        self._device_info_label.setStyleSheet(" font-size:11px; padding:2px 0;")
         self._device_info_label.setWordWrap(True)
         l.addWidget(self._device_info_label)
 
@@ -1026,8 +1018,8 @@ class ScreenshotStudioPanel(QWidget):
             "from your app's Activity for testing."
         )
         self._secure_warning.setStyleSheet(
-            "background:#2a1a00; color:#ffaa44; font-size:11px;"
-            "border:1px solid #6b3d00; border-radius:6px; padding:8px;"
+            " font-size:11px;"
+            " border-radius:6px; padding:8px;"
         )
         self._secure_warning.setWordWrap(True)
         self._secure_warning.setVisible(False)
@@ -1047,7 +1039,7 @@ class ScreenshotStudioPanel(QWidget):
         l.addLayout(demo_row)
 
         self._capture_btn = QPushButton("Capture Screenshot from Device")
-        self._capture_btn.setObjectName("primary")
+        self._capture_btn.setDefault(True)
         self._capture_btn.clicked.connect(self._capture_screenshot)
         l.addWidget(self._capture_btn)
 
@@ -1079,7 +1071,7 @@ class ScreenshotStudioPanel(QWidget):
 
         # Emulator tip
         emu_tip = QLabel("Tip: Emulators never have FLAG_SECURE issues")
-        emu_tip.setStyleSheet("color:#6e6e73; font-size:10px; font-style:italic;")
+        emu_tip.setStyleSheet(" font-size:10px; font-style:italic;")
         l.addWidget(emu_tip)
 
         # Frame selector
@@ -1095,7 +1087,7 @@ class ScreenshotStudioPanel(QWidget):
         ios_layout.setContentsMargins(0, 0, 0, 0)
         lbl_crop = QLabel("Crop Android:")
         lbl_crop.setFixedWidth(110)
-        lbl_crop.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl_crop.setStyleSheet(" font-size:12px;")
         lbl_crop.setToolTip("Status bar (top) and nav bar (bottom) heights to strip before drawing iOS bars")
         self._crop_top = QSpinBox()
         self._crop_bottom = QSpinBox()
@@ -1120,7 +1112,7 @@ class ScreenshotStudioPanel(QWidget):
         size_row = QHBoxLayout()
         lbl_size = QLabel("Phone Size:")
         lbl_size.setFixedWidth(110)
-        lbl_size.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl_size.setStyleSheet(" font-size:12px;")
         self._phone_size_slider = QSlider(Qt.Orientation.Horizontal)
         self._phone_size_slider.setRange(40, 150)
         self._phone_size_slider.setValue(150)
@@ -1128,7 +1120,7 @@ class ScreenshotStudioPanel(QWidget):
         self._phone_size_slider.valueChanged.connect(self._schedule_preview)
         self._phone_size_label = QLabel("150%")
         self._phone_size_label.setFixedWidth(36)
-        self._phone_size_label.setStyleSheet("color:#ececec; font-size:12px;")
+        self._phone_size_label.setStyleSheet(" font-size:12px;")
         self._phone_size_slider.valueChanged.connect(
             lambda v: self._phone_size_label.setText(f"{v}%")
         )
@@ -1141,14 +1133,14 @@ class ScreenshotStudioPanel(QWidget):
         offset_row = QHBoxLayout()
         lbl_offset = QLabel("Vertical Pos:")
         lbl_offset.setFixedWidth(110)
-        lbl_offset.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl_offset.setStyleSheet(" font-size:12px;")
         self._phone_offset_slider = QSlider(Qt.Orientation.Horizontal)
         self._phone_offset_slider.setRange(-500, 500)
         self._phone_offset_slider.setValue(0)
         self._phone_offset_slider.valueChanged.connect(self._schedule_preview)
         self._phone_offset_label = QLabel("0")
         self._phone_offset_label.setFixedWidth(36)
-        self._phone_offset_label.setStyleSheet("color:#ececec; font-size:12px;")
+        self._phone_offset_label.setStyleSheet(" font-size:12px;")
         self._phone_offset_slider.valueChanged.connect(
             lambda v: self._phone_offset_label.setText(str(v))
         )
@@ -1159,7 +1151,7 @@ class ScreenshotStudioPanel(QWidget):
 
         # Screenshot info
         self._shot_info = QLabel("No screenshot loaded")
-        self._shot_info.setStyleSheet("color:#5f5f64; font-size:11px; padding: 2px 0;")
+        self._shot_info.setStyleSheet(" font-size:11px; padding: 2px 0;")
         l.addWidget(self._shot_info)
 
     def _build_background_section(self):
@@ -1176,7 +1168,7 @@ class ScreenshotStudioPanel(QWidget):
         row1 = QHBoxLayout()
         lbl1 = QLabel("Color Top:")
         lbl1.setFixedWidth(110)
-        lbl1.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl1.setStyleSheet(" font-size:12px;")
         self._bg1_btn = ColorButton("#1a0533")
         self._bg1_btn.color_changed.connect(lambda _: self._schedule_preview())
         row1.addWidget(lbl1)
@@ -1188,7 +1180,7 @@ class ScreenshotStudioPanel(QWidget):
         row2 = QHBoxLayout()
         lbl2 = QLabel("Color Bottom:")
         lbl2.setFixedWidth(110)
-        lbl2.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl2.setStyleSheet(" font-size:12px;")
         self._bg2_btn = ColorButton("#3d1065")
         self._bg2_btn.color_changed.connect(lambda _: self._schedule_preview())
         row2.addWidget(lbl2)
@@ -1237,7 +1229,7 @@ class ScreenshotStudioPanel(QWidget):
         row_tc = QHBoxLayout()
         lbl = QLabel("Title Style:")
         lbl.setFixedWidth(110)
-        lbl.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl.setStyleSheet(" font-size:12px;")
         self._title_color_btn = ColorButton("#ffffff")
         self._title_color_btn.color_changed.connect(lambda _: self._schedule_preview())
         self._title_size = QSpinBox()
@@ -1259,7 +1251,7 @@ class ScreenshotStudioPanel(QWidget):
         row_sc = QHBoxLayout()
         lbl2 = QLabel("Subtitle Style:")
         lbl2.setFixedWidth(110)
-        lbl2.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl2.setStyleSheet(" font-size:12px;")
         self._sub_color_btn = ColorButton("#cccccc")
         self._sub_color_btn.color_changed.connect(lambda _: self._schedule_preview())
         self._sub_size = QSpinBox()
@@ -1282,7 +1274,7 @@ class ScreenshotStudioPanel(QWidget):
         row_w = QHBoxLayout()
         lbl_w = QLabel("Weight:")
         lbl_w.setFixedWidth(110)
-        lbl_w.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl_w.setStyleSheet(" font-size:12px;")
         self._title_weight = QSpinBox()
         self._title_weight.setRange(100, 900)
         self._title_weight.setSingleStep(100)
@@ -1318,7 +1310,7 @@ class ScreenshotStudioPanel(QWidget):
         res_row = QHBoxLayout()
         lbl = QLabel("Resolution:")
         lbl.setFixedWidth(80)
-        lbl.setStyleSheet("color:#8e8e93; font-size:12px;")
+        lbl.setStyleSheet(" font-size:12px;")
         self._resolution_combo = QComboBox()
         for label, size in RESOLUTIONS:
             self._resolution_combo.addItem(label, size)
@@ -1329,7 +1321,7 @@ class ScreenshotStudioPanel(QWidget):
         l.addLayout(res_row)
 
         self._export_btn = QPushButton("⬇  Export PNG")
-        self._export_btn.setObjectName("primary")
+        self._export_btn.setDefault(True)
         self._export_btn.clicked.connect(self._export)
         l.addWidget(self._export_btn)
 
@@ -1341,7 +1333,7 @@ class ScreenshotStudioPanel(QWidget):
         l.addWidget(load_btn)
 
         hint = QLabel('Format: [{"title":"...", "subtitle":"...", "preset":"Ocean Blue", "filename":"01.png"}, ...]')
-        hint.setStyleSheet("color:#6e6e73; font-size:10px;")
+        hint.setStyleSheet(" font-size:10px;")
         hint.setWordWrap(True)
         l.addWidget(hint)
 
@@ -1352,15 +1344,15 @@ class ScreenshotStudioPanel(QWidget):
         bl.setSpacing(6)
 
         self._batch_device_label = QLabel("")
-        self._batch_device_label.setStyleSheet("color:#5e9cff; font-size:12px; font-weight:bold;")
+        self._batch_device_label.setStyleSheet(" font-size:12px; font-weight:bold;")
         bl.addWidget(self._batch_device_label)
 
         self._batch_step_label = QLabel("")
-        self._batch_step_label.setStyleSheet("color:#ececec; font-size:12px;")
+        self._batch_step_label.setStyleSheet(" font-size:12px;")
         bl.addWidget(self._batch_step_label)
 
         self._batch_item_label = QLabel("")
-        self._batch_item_label.setStyleSheet("color:#a8a8ad; font-size:11px;")
+        self._batch_item_label.setStyleSheet(" font-size:11px;")
         self._batch_item_label.setWordWrap(True)
         bl.addWidget(self._batch_item_label)
 
@@ -1437,7 +1429,7 @@ class ScreenshotStudioPanel(QWidget):
         d = self._devices[index]
         if d.get("platform") == "ios":
             self._device_info_label.setText(f"{d['os_ver']}  ·  iOS Simulator — native iOS screenshots")
-            self._device_info_label.setStyleSheet("color:#3a8a3a; font-size:11px; padding:2px 0;")
+            self._device_info_label.setStyleSheet(" font-size:11px; padding:2px 0;")
             if not self._plan:
                 self._frame_combo.setCurrentText("iPad Pro 13" if "ipad" in d["model"].lower() else "iPhone 16 Pro Max")
             return
@@ -1448,10 +1440,10 @@ class ScreenshotStudioPanel(QWidget):
             parts.append(d["resolution"])
         if d["is_emulator"]:
             parts.append("✓ No FLAG_SECURE restrictions")
-            self._device_info_label.setStyleSheet("color:#3a8a3a; font-size:11px; padding:2px 0;")
+            self._device_info_label.setStyleSheet(" font-size:11px; padding:2px 0;")
         else:
             parts.append("Physical — FLAG_SECURE may apply")
-            self._device_info_label.setStyleSheet("color:#6e6e73; font-size:11px; padding:2px 0;")
+            self._device_info_label.setStyleSheet(" font-size:11px; padding:2px 0;")
         self._device_info_label.setText("  ·  ".join(parts))
 
         # Auto-suggest device frame based on model name (a loaded plan picks its own)
@@ -1982,7 +1974,8 @@ def main():
     from app.tools.config_viewer_panel import ConfigViewerPanel
     app = QApplication(sys.argv)
     app.setApplicationName("App Listing Studio")
-    app.setStyle("Fusion")
+    if sys.platform.startswith("linux"):
+        app.setStyle("Fusion")   # macOS / Windows: keep the native style
     set_app_icon(app)
     win = AppWindow()
 

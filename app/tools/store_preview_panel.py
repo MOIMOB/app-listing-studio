@@ -25,6 +25,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QFont, QCursor,
 
 from PIL import Image
 
+from app import theme
 from app.config import AppConfig
 from app.listing import Entry, PlanSource, find_plans, load_preview_image, aspect_of
 from app.plan import _ROOT
@@ -193,27 +194,23 @@ class StorePreviewPanel(QWidget):
     def _build_listings_column(self):
         col = QWidget()
         col.setFixedWidth(250)
-        col.setStyleSheet("background:#0c0c16; border-right:1px solid #2a2a2d;")
         lay = QVBoxLayout(col)
         lay.setContentsMargins(10, 12, 10, 10)
         lay.setSpacing(8)
 
         head = QHBoxLayout()
         title = QLabel("My listings")
-        title.setStyleSheet("color:#ececec; font-size:13px; font-weight:600; border:none;")
+        title.setStyleSheet("font-size:13px; font-weight:600;")
         head.addWidget(title, 1)
-        add_btn = QPushButton("+")
-        add_btn.setFixedSize(30, 28)
+        add_btn = QPushButton("Add")
         add_btn.setToolTip("Add a repo or plan")
         menu = QMenu(add_btn)
         menu.addAction("Add app repo folder…", self._add_repo)
         menu.addAction("Add plan JSON file…", self._add_plan_file)
         menu.addAction("Scan folder for repos…", self._scan_folder)
         add_btn.setMenu(menu)
-        add_btn.setStyleSheet("QPushButton::menu-indicator { width:0; }")
         head.addWidget(add_btn)
-        self._remove_btn = QPushButton("✕")
-        self._remove_btn.setFixedSize(30, 28)
+        self._remove_btn = QPushButton("Remove")
         self._remove_btn.setToolTip("Remove from My listings (files are not touched)")
         self._remove_btn.clicked.connect(self._remove_selected)
         head.addWidget(self._remove_btn)
@@ -221,12 +218,7 @@ class StorePreviewPanel(QWidget):
 
         self._list = QListWidget()
         self._list.setIconSize(QSize(36, 36))
-        self._list.setStyleSheet("""
-            QListWidget { background:transparent; border:none; outline:none; }
-            QListWidget::item { color:#d0d0d4; padding:6px 4px; border-radius:8px; }
-            QListWidget::item:hover { background:#1f1f21; }
-            QListWidget::item:selected { background:#262629; color:#fff; }
-        """)
+        self._list.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
         self._list.currentRowChanged.connect(self._on_entry_selected)
         lay.addWidget(self._list, 1)
         return col
@@ -234,7 +226,6 @@ class StorePreviewPanel(QWidget):
     def _build_toolbar(self):
         bar = QWidget()
         bar.setFixedHeight(56)
-        bar.setStyleSheet("background:#1b1b1d; border-bottom:1px solid #323236;")
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(16, 8, 16, 8)
         bl.setSpacing(10)
@@ -250,7 +241,6 @@ class StorePreviewPanel(QWidget):
             b = QPushButton(label)
             b.setCheckable(True)
             b.setChecked(key == "android")
-            b.setObjectName("chip")
             b.clicked.connect(lambda _c, k=key: self._set_platform(k))
             self._store_group.addButton(b)
             bl.addWidget(b)
@@ -270,7 +260,7 @@ class StorePreviewPanel(QWidget):
         bl.addWidget(self._dark_cb)
 
         self._status = QLabel("")
-        self._status.setStyleSheet("color:#8e8e93; font-size:12px;")
+        self._status.setStyleSheet(" font-size:12px;")
         self._status.setWordWrap(True)
         bl.addWidget(self._status, 1)
         return bar
@@ -475,7 +465,7 @@ class StorePreviewPanel(QWidget):
     def _set_status(self, text, error=False, tooltip=""):
         self._status.setText(text)
         self._status.setToolTip(tooltip)
-        self._status.setStyleSheet(f"color:{'#ff8866' if error else '#8e8e93'}; font-size:12px;")
+        theme.status(self._status, theme.ERROR) if error else theme.muted(theme.status(self._status, None))
 
     def _clear_page(self):
         while self._holder_lay.count():
@@ -490,13 +480,13 @@ class StorePreviewPanel(QWidget):
         msg = QLabel(text)
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         msg.setWordWrap(True)
-        msg.setStyleSheet("color:#8e8e93; font-size:14px;")
+        msg.setStyleSheet(" font-size:14px;")
         self._holder_lay.addWidget(msg)
 
     def _rebuild_page(self):
         self._clear_page()
         if not self._entries:
-            self._message("No listings yet.\n\nClick + to add an app repo (a folder with fastlane/ or a plan JSON),\n"
+            self._message("No listings yet.\n\nClick Add to add an app repo (a folder with fastlane/ or a plan JSON),\n"
                           "or “Scan folder for repos…” to add all of them at once.")
             self._set_status("")
             return

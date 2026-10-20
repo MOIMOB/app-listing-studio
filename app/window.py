@@ -18,10 +18,9 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QFrame,
 )
 from PyQt6.QtGui import QIcon
-from app import theme
 from app.sidebar import SidebarWidget
 from app.log_panel import GlobalLogPanel
 
@@ -57,13 +56,7 @@ class AppWindow(QMainWindow):
 
         self._tool_map: dict[str, int] = {}
 
-        self._apply_theme()
         self._build()
-
-    # ── Theme ─────────────────────────────────────────────────────────────────
-
-    def _apply_theme(self):
-        self.setStyleSheet(theme.STYLESHEET)
 
     # ── Layout ────────────────────────────────────────────────────────────────
 
@@ -84,6 +77,10 @@ class AppWindow(QMainWindow):
         self._sidebar = SidebarWidget()
         self._sidebar.tool_selected.connect(self._on_tool_selected)
         content_row.addWidget(self._sidebar)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        content_row.addWidget(sep)
 
         self._stack = QStackedWidget()
         content_row.addWidget(self._stack, 1)
